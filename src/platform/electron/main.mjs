@@ -72,8 +72,11 @@ app.whenReady().then(async () => {
   runtime = new AppRuntime({
     store: new JsonStore(join(app.getPath('userData'), 'pomopet-state.json')),
     onState: (state) => send('state', state),
-    onPresentation: (event) => send('presentation', event),
-    onNotify: ({ title, body }) => { if (Notification.isSupported()) new Notification({ title, body }).show(); }
+    onPresentation: (event) => {
+      if (runtime.data.pet.visible && petWindow?.isVisible()) send('presentation', event);
+      else if (['alarm', 'offwork', 'annoyed', 'reward'].includes(event.kind) && Notification.isSupported()) new Notification({ title: event.label ? 'Pomopet · ' + event.label : 'Pomopet 想提醒你', body: event.text }).show();
+    },
+    onNotify: () => {}
   });
   await runtime.init(); createWindows(); createTray();
   setInterval(() => runtime.tick().catch(console.error), 500);
@@ -85,6 +88,7 @@ app.on('window-all-closed', () => {});
 ipcMain.handle('command', async (_event, name, payload) => {
   const state = await runtime.command(name, payload);
   if (name === 'settings:update' && Object.hasOwn(payload, 'launchAtLogin')) app.setLoginItemSettings({ openAtLogin: payload.launchAtLogin });
+  if (name === 'pet:visible') { payload.visible ? petWindow.showInactive() : petWindow.hide(); refreshTray(); }
   return state;
 });
 ipcMain.handle('state', () => runtime.view());

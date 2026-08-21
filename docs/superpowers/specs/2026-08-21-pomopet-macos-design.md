@@ -385,20 +385,25 @@ Event presentation priority:
 
 Every event is durably recorded before presentation. A higher-priority event may interrupt pet animation and voice; interrupted durable events return to the presentation queue. After a one-shot event finishes, the pet restores the current timer-derived state. Stale optional idle reactions may be dropped, but alarms and completion rewards may never be dropped or duplicated.
 
-## Technical Recommendation
+## Implemented Technical Architecture
 
-Use native SwiftUI and AppKit for the first macOS implementation. The pet lives in a transparent, non-activating `NSPanel`; settings use SwiftUI. Use Rive for the hand-drawn pet state machine behind a small renderer adapter so animation runtime changes do not affect timer and reminder logic.
+The core release uses Electron 35 and plain JavaScript modules. The Linux DevBox has Node 20 but no Swift or Rust toolchain; Electron was the only route that could be implemented, unit-tested, rendered on Linux, and packaged for Apple Silicon from the same source. Native SwiftUI/AppKit would have left the application unbuildable and untestable in the available environment. Tauri was rejected because Rust is unavailable and its transparent-window integration would still require macOS QA.
 
-Suggested implementation layers:
+The trade-off is a larger installed size than a native application. Background work is deliberately limited to one 500 ms scheduler check, two small windows, no remote content, and no renderer framework. The business core imports no Electron APIs and can be reused by a future shell.
 
-- `TimerEngine`: pure Swift focus and break state using persisted target times.
-- `AlarmScheduler`: alarm recurrence plus `UNUserNotificationCenter` fallback.
-- `PetDirector`: maps timer, alarm, and user events to pet emotion, animation, copy, and voice IDs.
-- `PetRenderer`: adapter around a pinned Rive Apple runtime version.
-- `VoicePlayer`: local audio playback, priority queue, volume, and simple audio-level mouth motion.
-- `PetPanel`: transparent AppKit panel, drag handling, screen-edge clamping, and visibility.
-- `SettingsStore`: local settings, timer recovery state, alarms, and pet position.
-- `LoginItemService`: optional launch at login through `SMAppService`.
+Implemented layers:
+
+- `src/core/TimerEngine`: injectable clock, target-time calculation, pause/resume, focus/break state, cross-midnight counting, and restart recovery.
+- `src/core/AlarmScheduler`: one-off and local weekday recurrence, independent snooze occurrences, grace window, and durable occurrence ledger.
+- `src/core/OffworkScheduler`: workday matching, snooze, dismissal, and one non-blocking escalation.
+- `src/core/PresentationQueue`: durable event deduplication and alarm > completion > off-work > break > interaction priority.
+- `src/platform/electron/AppRuntime`: command boundary, copy selection, state persistence, timer/alarm polling, and presentation routing.
+- `src/platform/electron/main.mjs`: transparent focus-free always-on-top pet window, control window, tray menu, notifications, login item adapter, drag clamping, and IPC.
+- `src/platform/electron/JsonStore`: local atomic JSON replacement for timer, settings, alarms, ledger, and pet position.
+- `src/ui`: framework-free paper-note control UI and eight consistent transparent PNG companion poses with state motion.
+- `BrowserVoicePlayer`: bundled MP3 playback, one active clip, priority interruption, volume, and silent failure fallback.
+
+The initial specification's quit-state notification contract is intentionally narrowed in the implemented core: Electron notifications are reliable while the process runs, including when the pet is hidden. A fully quit Electron process cannot schedule durable macOS notifications without a native helper. Launch at login is therefore the recommended fallback for this release. Native notification scheduling remains a macOS-only follow-up, not a claimed capability.
 
 ## Data
 
@@ -421,9 +426,9 @@ No personal productivity data leaves the machine in the first release.
 - If off-work scheduling fails, keep manual timer behavior available.
 - If the floating window cannot become always-on-top, show a clear settings-window warning.
 
-## Prototype Scope
+## Prototype And Core Scope
 
-The HTML prototype is phase 1 of the design deliverables. It demonstrates product behavior and interaction shape. It is not production code and does not need to match the future native macOS implementation internals.
+The legacy `prototype/index.html` remains a historical concept artifact. The production renderer is now under `src/ui` and is wired to the tested runtime.
 
 The next HTML prototype revision should show:
 
@@ -462,9 +467,16 @@ Release should not be considered ready until these core checks pass:
 - Pet can be dragged, hidden, and restored.
 - A 24-hour soak run completes with scheduled alarms, at least one sleep/wake cycle, no duplicate presentation, and no timer drift beyond the defined recovery rules.
 
-## Open Product Decisions
+## Asset Provenance
 
-- Whether the MVP app name should be Pomopet, 下班小宠, or another name.
+- `src/ui/public/assets/pet/` was generated specifically for this repository with the built-in image generation tool, then locally chroma-keyed, split, trimmed, and visually checked. Eight transparent PNG poses retain one original character identity and do not load third-party or remote assets at runtime.
+- `build/icon.png` is composed locally from the same generated companion artwork.
+- The four Chinese voice clips were generated during development with Microsoft Edge neural TTS, voice `zh-CN-XiaoxiaoNeural`. They are bundled and the application makes no runtime TTS request.
+- UI textures and motion are authored CSS. No remote fonts, image CDNs, analytics, or AI APIs are loaded at runtime.
+
+## Resolved Product Decisions
+
+- The MVP name is Pomopet and the first companion is named 末末.
 
 Resolved first-release decisions:
 
@@ -477,9 +489,9 @@ Resolved first-release decisions:
 
 ## Milestones
 
-1. Product design and HTML prototype.
-2. Native macOS project and animated pet-panel proof of concept.
-3. Timer, alarm scheduler, and local settings.
-4. Pet director, built-in copy, and bundled voice playback.
-5. Off-work companionship, ignored-reminder emotion, and short intimate interactions.
-6. macOS packaging, long-running reliability tests, and QA.
+1. Product design and historical HTML prototype — complete.
+2. Cross-platform business core and automated scheduler tests — complete.
+3. Electron shell, control window, tray, persistent floating pet, and local settings — complete in source; macOS behavior requires Mac QA.
+4. Companion direction, built-in copy, interactions, and bundled voice playback — complete.
+5. Linux renderer checks, accelerated reliability tests, and packaging inputs — complete or recorded in the overnight report.
+6. Apple Silicon signing, notarization, native quit-state notification scheduling, and Mac hardware QA — follow-up release work.

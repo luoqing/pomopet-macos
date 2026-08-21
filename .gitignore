@@ -4,7 +4,11 @@ dist/release/*
 !dist/release/README.md
 test-results/
 playwright-report/
+artifacts/screenshots/*.png
+!artifacts/screenshots/README.md
 *.log
 .DS_Store
 coverage/
+src/ui/assets/pomopet-sprite*.png
+src/ui/public/assets/pomopet-sprite*.png
 

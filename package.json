@@ -2,6 +2,7 @@
   "name": "pomopet",
   "version": "0.1.0",
   "description": "一只陪你工作的桌面小狗",
+  "author": "Pomopet",
   "type": "module",
   "main": "src/platform/electron/main.mjs",
   "scripts": {
@@ -9,12 +10,15 @@
     "start": "electron .",
     "start:test": "POMOPET_TEST=1 electron .",
     "lint": "eslint .",
-    "test": "vitest run --root .",
+    "test": "vitest run --root . --exclude 'tests/ui/**'",
     "test:soak": "vitest run --root . tests/soak.test.js",
-    "test:ui": "npm run build && playwright test",
+    "test:ui": "npm run build && NO_PROXY=127.0.0.1,localhost no_proxy=127.0.0.1,localhost playwright test",
+    "preview:test": "vite preview --host 127.0.0.1 --port 4173",
     "build": "vite build",
     "package:linux": "npm run build && electron-builder --linux dir --x64",
     "package:mac": "npm run build && electron-builder --mac dmg zip --arm64",
+    "package:mac:dir": "npm run build && electron-builder --mac dir --arm64",
+    "package:mac:zip": "npm run build && electron-builder --mac zip --arm64",
     "verify": "npm run lint && npm run test && npm run build"
   },
   "devDependencies": {
@@ -39,6 +43,7 @@
     ],
     "mac": {
       "category": "public.app-category.productivity",
+      "icon": "build/icon.png",
       "target": [{ "target": "dmg", "arch": ["arm64"] }, { "target": "zip", "arch": ["arm64"] }],
       "hardenedRuntime": true,
       "gatekeeperAssess": false,
@@ -47,6 +52,6 @@
         "NSUserNotificationUsageDescription": "Pomopet 需要通知权限，以便在窗口隐藏时提醒闹钟和休息。"
       }
     },
-    "linux": { "target": ["dir"], "category": "Utility" }
+    "linux": { "target": ["dir"], "category": "Utility", "icon": "build/icon.png" }
   }
 }

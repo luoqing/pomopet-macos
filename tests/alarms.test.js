@@ -25,6 +25,27 @@ describe('AlarmScheduler', () => {
     expect(scheduler.nextFor(scheduler.alarms[0], due)).toBe(baseNext);
   });
 
+  it('delivers a snoozed one-off after its base occurrence is consumed', () => {
+    const clock = new FakeClock(10_000); const scheduler = new AlarmScheduler(clock);
+    scheduler.add({ id: 'once-snooze', label: '喝水', type: 'once', at: 10_000 }); const original = scheduler.due()[0];
+    const snooze = scheduler.snooze('once-snooze', original.occurrenceId, 10); clock.advance(10 * 60_000);
+    expect(scheduler.due()).toEqual([expect.objectContaining({ occurrenceId: snooze.id, label: '喝水' })]);
+  });
+
+  it('manual disabling clears pending snoozes', () => {
+    const clock = new FakeClock(10_000); const scheduler = new AlarmScheduler(clock);
+    scheduler.add({ id: 'disable', label: '喝水', type: 'once', at: 10_000 }); const original = scheduler.due()[0];
+    scheduler.snooze('disable', original.occurrenceId, 10); scheduler.setEnabled('disable', false); clock.advance(10 * 60_000);
+    expect(scheduler.due()).toEqual([]);
+  });
+
+  it('does not re-enable an expired one-off alarm', () => {
+    const clock = new FakeClock(20_000); const scheduler = new AlarmScheduler(clock);
+    scheduler.add({ id: 'expired', label: '旧提醒', type: 'once', at: 10_000, enabled: false });
+    expect(scheduler.setEnabled('expired', true).enabled).toBe(false);
+    expect(scheduler.due()).toEqual([]);
+  });
+
   it('shares durable claims across scheduler instances and drops stale wake events', () => {
     const clock = new FakeClock(1_000_000); const ledger = new OccurrenceLedger();
     const alarm = [{ id: 'x', label: 'x', type: 'once', at: clock.now() - 1_000, enabled: true, snoozes: [] }];

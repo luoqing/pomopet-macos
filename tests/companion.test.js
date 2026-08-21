@@ -30,6 +30,13 @@ describe('companion services', () => {
     const now = new Date(2026, 7, 21, 18, 30).getTime(); const clock = new FakeClock(now);
     const scheduler = new OffworkScheduler(clock); expect(scheduler.tick()[0].level).toBe(1);
     scheduler.snooze(); clock.advance(14 * 60_000); expect(scheduler.tick()).toEqual([]);
-    clock.advance(2 * 60_000); expect(scheduler.tick()[0].level).toBe(2); scheduler.dismissToday(); expect(scheduler.tick()).toEqual([]);
+    clock.advance(2 * 60_000); expect(scheduler.tick()[0].level).toBe(1);
+    clock.advance(15 * 60_000); expect(scheduler.tick()[0].level).toBe(2); scheduler.dismissToday(); expect(scheduler.tick()).toEqual([]);
+  });
+
+  it('persists the selected gentle off-work pose', () => {
+    const clock = new FakeClock(new Date(2026, 7, 21, 18, 30).getTime());
+    const scheduler = new OffworkScheduler(clock, { ...new OffworkScheduler(clock).snapshot(), pose: 'fainted' });
+    expect(scheduler.snapshot().pose).toBe('fainted');
   });
 });

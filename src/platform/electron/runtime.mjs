@@ -53,7 +53,7 @@ export class AppRuntime {
     if (name === 'settings:update') this.data.settings = { ...this.data.settings, ...payload };
     if (name === 'pet:position') this.data.pet.position = payload;
     if (name === 'pet:visible') this.data.pet.visible = payload.visible;
-    if (name === 'interaction') this.#present({ category: payload.kind, kind: payload.kind, priority: PRIORITY.interaction, durableId: null, duration: 12_000 });
+    if (name === 'interaction' && this.data.settings.interactions) this.#present({ category: payload.kind, kind: payload.kind, priority: PRIORITY.interaction, durableId: null, duration: 12_000 });
     await this.#handle(events); await this.persist(); this.emit(); return this.view();
   }
   async persist() {
@@ -69,7 +69,10 @@ export class AppRuntime {
         this.#present({ category: 'alarm', kind: 'alarm', priority: PRIORITY.alarm, durableId: event.occurrenceId, duration: 20_000, actions: { alarmId: event.alarmId, occurrenceId: event.occurrenceId }, label: event.label });
         this.onNotify({ title: 'Pomopet 闹钟 · ' + event.label, body: '到点啦！这是过去的你寄来的加急小纸条。' });
       }
-      if (event.type === 'offwork') this.#present({ category: event.level === 1 ? 'offwork' : 'ignored', kind: event.level === 1 ? 'offwork' : 'annoyed', priority: PRIORITY.offwork, durableId: 'offwork:' + event.day + ':' + event.level, duration: 20_000 });
+      if (event.type === 'offwork') {
+        const kind = event.level === 1 ? (this.offwork.state.pose === 'fainted' ? 'fainted' : 'offwork') : 'annoyed';
+        this.#present({ category: event.level === 1 ? 'offwork' : 'ignored', kind, priority: PRIORITY.offwork, durableId: 'offwork:' + event.day + ':' + event.level, duration: 20_000, actions: { offwork: true } });
+      }
     }
     if (events.length) this.dirty = true;
   }

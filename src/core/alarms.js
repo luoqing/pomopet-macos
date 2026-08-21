@@ -30,14 +30,18 @@ export class AlarmScheduler {
   }
   update(id, patch) { const index = this.alarms.findIndex((a) => a.id === id); if (index < 0) return null; this.alarms[index] = { ...this.alarms[index], ...structuredClone(patch) }; return structuredClone(this.alarms[index]); }
   remove(id) { this.alarms = this.alarms.filter((a) => a.id !== id); }
-  setEnabled(id, enabled) { return this.update(id, { enabled }); }
+  setEnabled(id, enabled) {
+    const alarm = this.alarms.find((item) => item.id === id); if (!alarm) return null;
+    if (enabled && alarm.type === 'once' && alarm.at <= this.clock.now()) return structuredClone(alarm);
+    alarm.enabled = enabled; if (!enabled) alarm.snoozes = [];
+    return structuredClone(alarm);
+  }
   due({ graceMs = 15 * MINUTE } = {}) {
     const now = this.clock.now(); const events = [];
     for (const alarm of this.alarms) {
-      if (!alarm.enabled) continue;
       const candidates = [];
-      if (alarm.type === 'once' && alarm.at <= now) candidates.push({ dueAt: alarm.at, id: occurrenceId(alarm.id, alarm.at) });
-      if (alarm.type === 'weekly') {
+      if (alarm.enabled && alarm.type === 'once' && alarm.at <= now) candidates.push({ dueAt: alarm.at, id: occurrenceId(alarm.id, alarm.at) });
+      if (alarm.enabled && alarm.type === 'weekly') {
         const since = now - graceMs - MINUTE;
         let dueAt = nextRepeatingOccurrence(alarm, since);
         while (dueAt && dueAt <= now) { candidates.push({ dueAt, id: occurrenceId(alarm.id, dueAt) }); dueAt = nextRepeatingOccurrence(alarm, dueAt); }

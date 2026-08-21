@@ -38,4 +38,18 @@ describe('AppRuntime', () => {
     const restored = new AppRuntime({ store, clock: new FakeClock(1) }); await restored.init();
     expect(restored.view()).toMatchObject({ settings: { volume: .3, launchAtLogin: true }, pet: { position: { x: 20, y: 30 } }, alarms: [{ label: '新标签' }] });
   });
+
+  it('can disable intimate interactions without affecting reminders', async () => {
+    const present = vi.fn(); const runtime = new AppRuntime({ store: new MemoryStore(), clock: new FakeClock(1), onPresentation: present }); await runtime.init();
+    await runtime.command('settings:update', { interactions: false }); await runtime.command('interaction', { kind: 'comfort' });
+    expect(present).not.toHaveBeenCalled();
+    await runtime.command('timer:start', { focusMinutes: 1, breakMinutes: 1 }); expect(present).toHaveBeenCalledWith(expect.objectContaining({ kind: 'focus' }));
+  });
+
+  it('uses the configured gentle off-work pose', async () => {
+    const clock = new FakeClock(new Date(2026, 7, 21, 18, 30).getTime()); const present = vi.fn();
+    const runtime = new AppRuntime({ store: new MemoryStore(), clock, onPresentation: present }); await runtime.init();
+    await runtime.command('offwork:update', { pose: 'fainted' }); await runtime.tick();
+    expect(present).toHaveBeenCalledWith(expect.objectContaining({ kind: 'fainted', actions: { offwork: true } }));
+  });
 });

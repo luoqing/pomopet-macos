@@ -8,7 +8,9 @@ describe('bundled companion assets', () => {
     expect([...ids].sort()).toEqual(['alarm', 'break', 'focus-complete', 'offwork']);
     for (const id of ids) { const file = 'src/ui/public/audio/' + id + '.mp3'; await access(file); expect((await stat(file)).size).toBeGreaterThan(1_000); }
   });
-  it('contains independent illustrated pet and toy assets', async () => {
-    for (const file of ['src/ui/public/assets/momo.svg', 'src/ui/public/assets/ball.svg']) { await access(file); expect((await stat(file)).size).toBeGreaterThan(200); }
+  it('contains every illustrated pet pose and the application icon', async () => {
+    const poses = ['focus', 'reward', 'ball', 'sleepy', 'fainted', 'annoyed', 'pet', 'feed'];
+    const files = [...poses.map((pose) => `src/ui/public/assets/pet/momo-${pose}.png`), 'build/icon.png'];
+    for (const file of files) { await access(file); expect((await stat(file)).size).toBeGreaterThan(10_000); }
   });
 });
