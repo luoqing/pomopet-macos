@@ -1,0 +1,52 @@
+{
+  "name": "pomopet",
+  "version": "0.1.0",
+  "description": "一只陪你工作的桌面小狗",
+  "type": "module",
+  "main": "src/platform/electron/main.mjs",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "start": "electron .",
+    "start:test": "POMOPET_TEST=1 electron .",
+    "lint": "eslint .",
+    "test": "vitest run --root .",
+    "test:soak": "vitest run --root . tests/soak.test.js",
+    "test:ui": "npm run build && playwright test",
+    "build": "vite build",
+    "package:linux": "npm run build && electron-builder --linux dir --x64",
+    "package:mac": "npm run build && electron-builder --mac dmg zip --arm64",
+    "verify": "npm run lint && npm run test && npm run build"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.33.0",
+    "@playwright/test": "1.55.0",
+    "electron": "35.7.5",
+    "electron-builder": "25.1.8",
+    "eslint": "9.33.0",
+    "vite": "6.1.0",
+    "vitest": "3.2.4"
+  },
+  "build": {
+    "appId": "cn.pomopet.desktop",
+    "productName": "Pomopet",
+    "asar": true,
+    "directories": { "output": "dist/release" },
+    "files": [
+      "dist/app/**/*",
+      "src/platform/electron/**/*",
+      "src/core/**/*",
+      "package.json"
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": [{ "target": "dmg", "arch": ["arm64"] }, { "target": "zip", "arch": ["arm64"] }],
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "identity": null,
+      "extendInfo": {
+        "NSUserNotificationUsageDescription": "Pomopet 需要通知权限，以便在窗口隐藏时提醒闹钟和休息。"
+      }
+    },
+    "linux": { "target": ["dir"], "category": "Utility" }
+  }
+}
