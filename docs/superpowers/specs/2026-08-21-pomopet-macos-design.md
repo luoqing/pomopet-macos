@@ -4,25 +4,29 @@ Date: 2026-08-21
 
 ## Summary
 
-Pomopet is a lightweight macOS desktop Pomodoro app where a cute pet lives on the user's desktop, accompanies focus sessions, celebrates completed work, and uses humorous reminders to make breaks and end-of-day shutdown feel delightful instead of nagging.
+Pomopet is a lightweight macOS work companion. A cute animated pet lives on the desktop, stays with the user during focus sessions, celebrates completed work, and delivers Pomodoro, alarm, break, and off-work reminders with warm humor.
 
-The first release is a local-only MVP. It focuses on a reliable timer, a floating desktop pet, configurable reminder behavior, and a curated built-in copy library. It does not include accounts, cloud sync, AI-generated copy, pet stores, leaderboards, or complex achievement systems.
+The first release has two core jobs: reliable Pomodoro and alarm reminders, and emotional companionship delivered through one high-quality pet, humorous built-in copy, simple animation, and one consistent cute voice. It is a local-only MVP and does not depend on AI or a runtime TTS service.
 
 The first release ships Chinese-only UI and reminder copy.
 
 ## Goals
 
 - Help users start and complete small focus sessions.
-- Make rest reminders and off-work reminders feel cute, funny, and hard to ignore in a good way.
-- Let users choose the pet's visual style, humor tone, and reminder intensity.
+- Deliver reliable one-off and repeating alarm reminders.
+- Make focus, rest, and off-work moments feel accompanied rather than managed by a utility.
+- Give the pet a recognizable personality through a consistent image, voice, motion, and writing style.
 - Keep the first macOS version small, private, and stable enough to run locally all day.
-- Provide a foundation that can later add AI-generated humor after the user supplies an API key.
+- Keep voice costs predictable by bundling a small set of pre-generated audio clips.
 
 ## Non-Goals
 
 - No account system or cloud sync in the first release.
 - No paid store, pet marketplace, multiplayer, or leaderboard.
 - No AI dependency in the first release.
+- No runtime cloud TTS, voice cloning, or user API key in the first release.
+- No punitive pet mechanics: the pet never becomes sick, dies, or loses relationship progress because the user was away.
+- No visible bond score, leveling tree, item inventory, shop, economy, or long mini-game loop in the first release.
 - No strict productivity surveillance, website blocking, or app usage tracking in the first release.
 - No Windows support in the first release, though the architecture should avoid unnecessary macOS-only business logic outside the shell layer.
 
@@ -35,9 +39,11 @@ The target user works at a computer for long stretches, may forget breaks, and w
 The app has two surfaces:
 
 - A floating pet window that can sit above the desktop and other apps.
-- A compact control/settings window for timer setup, pet style, reminder tone, and off-work rules.
+- A compact control/settings window for Pomodoro, alarms, voice, and off-work rules.
 
 The floating pet is the emotional center of the app. The control window is utilitarian and should not compete with normal work.
+
+Product principle: timer and alarm events trigger companionship. They do not exist as separate features beside the pet. Every important event should resolve to a coordinated pet action, line of copy, and optional voice clip.
 
 ## First Release Features
 
@@ -62,29 +68,83 @@ Break behavior:
 
 Acceptance criteria:
 
-- Timer remains accurate across normal app window focus changes.
+- Timer is calculated from a stored target time rather than accumulated one-second ticks.
+- Timer remains accurate across app window focus changes and device sleep/wake.
 - Pause/resume never loses the remaining time.
 - Completing a focus session triggers one reward event exactly once.
 - Stopping a session does not grant a completion reward.
 - Break timer start, pause, resume, skip, and end are distinct from focus completion rewards.
 
+Timer persistence and recovery:
+
+- Persist `sessionID`, phase, start time, target end time, paused remaining duration, and completion-event status.
+- While the process runs, use a monotonic clock for elapsed time so a manual wall-clock edit does not jump the timer.
+- After relaunch, crash recovery, or device wake, compare the persisted target end time with the current wall clock.
+- If focus expired while unavailable, record its completion exactly once. Show the celebration only when recovery occurs within 15 minutes; otherwise update history quietly.
+- Do not auto-start a break for a focus session recovered after its deadline. Sleep or time away already counts as interruption, so recovery returns to Idle.
+- Attribute a recovered completion to the local calendar day containing its target end time, including cross-midnight sessions.
+
+### Alarm Reminders
+
+The first release supports:
+
+- One-off alarms at a selected local date and time.
+- Repeating alarms on selected weekdays.
+- A short visible label.
+- Enable, disable, edit, delete, snooze, and dismiss.
+- A system local notification fallback when the app is not frontmost.
+
+When the app process is running, an alarm triggers a pet animation, a built-in reminder line, and optional voice. User-written alarm labels are shown as text but are not synthesized, which keeps all first-release voice audio local and predictable.
+
+If the user fully quits the app, previously scheduled system notifications may still appear, but the pet cannot animate until the app is running again. Launch at login is offered to keep normal reminders active.
+
+Alarm delivery contract:
+
+| Runtime state | Delivery |
+| --- | --- |
+| App running, pet visible | Pet animation, copy, and configured voice; suppress the duplicate system banner. |
+| App running, pet hidden | System notification; voice follows the user's voice setting; do not reveal the pet. |
+| App not frontmost but running | Same as pet-visible behavior; the non-activating pet panel does not steal keyboard focus. |
+| App fully quit | Previously scheduled system notification only. |
+| Device asleep at alarm time | On wake, deliver once if no more than 15 minutes late; otherwise mark the occurrence missed without pet or voice. |
+
+The app keeps a durable occurrence ledger. Both the pet scheduler and system notification handler claim the same occurrence ID, so only one visible in-app presentation is produced. If notification permission is denied, alarms still work while the app runs, and settings show that quit-state delivery is unavailable. macOS Focus mode may suppress system banners; Pomopet does not attempt to bypass that system policy.
+
+Schedule rules:
+
+- One-off alarms store an absolute instant plus the creation timezone; after travel, the UI shows the converted local time without changing the instant.
+- Repeating weekday alarms follow the current local timezone and recalculate after timezone changes.
+- For a nonexistent local time during a daylight-saving jump, fire at the first valid time after the gap.
+- For a repeated local time during a daylight-saving fallback, fire only at the first occurrence.
+- Alarm snooze defaults to 10 minutes and is configured separately from off-work snooze.
+- Snoozing one occurrence never changes the repeating alarm's base schedule.
+- Notification actions can snooze or dismiss the current occurrence even when they launch the app from a quit state.
+
+Acceptance criteria:
+
+- Each alarm fires no more than once for one scheduled occurrence.
+- Repeating alarms calculate the correct next local occurrence across weekends and daylight-saving changes.
+- Snooze creates one replacement occurrence and does not duplicate the original.
+- Disabling or deleting an alarm removes its pending system notifications.
+- Every runtime-state row and schedule rule above has an automated scheduler test where platform APIs permit it, plus a manual notification-delivery check on macOS.
+
 ### Desktop Pet
 
-The pet has three selectable visual directions in the first release:
-
-- Pixel style.
-- Hand-drawn style.
-- 3D chibi style.
-
-First-release scope: ship three bundled lightweight pet style packs. Each pack must support the same required pet states. The first release does not include user-uploaded pets, a pet marketplace, or a general asset editor.
+The first release ships one high-quality hand-drawn 2D pet. It is an animated work companion, not a decorative mascot. Pixel and 3D pet packs are deferred until the core character is strong enough to validate the product.
 
 The pet has these required states:
 
 - Idle: pet is present but quiet.
 - Focus: pet rests, reads, naps, or watches calmly.
 - Reward: pet celebrates a completed focus session.
-- Break: pet nudges the user to stand, stretch, drink water, or look away.
-- Off-work: pet performs the configured end-of-day action.
+- Break invite: pet brings a toy and asks the user to leave the computer for a moment.
+- Break ignored once: pet looks disappointed and asks gently again.
+- Break ignored repeatedly: pet puts its paws on its hips, taps the desk, or puffs its cheeks.
+- Alarm: pet gets the user's attention without covering unrelated work.
+- Off-work soft: pet asks the user to stop and rest.
+- Off-work annoyed: after being ignored, pet becomes visibly grumpy or lies down dramatically.
+- Play: pet reacts to petting, direct feeding, or a short ball toss.
+- Speaking: a lightweight mouth-open state plays over the current emotion while voice audio is active.
 
 The floating pet should be draggable and should remember its last position.
 
@@ -93,29 +153,85 @@ Acceptance criteria:
 - Pet state changes match timer and reminder events.
 - Pet can be moved without opening the settings window.
 - Pet can be temporarily hidden and restored from the menu bar.
-- Pet never blocks the entire screen unless the user selected an intrusive off-work action.
+- Clicking the pet offers pet, feed, and ball interactions. Each interaction completes in 10 to 20 seconds and has no score or failure state.
+- Pet never blocks the entire screen by default.
+
+### Intimate Interactions
+
+First-release pet interaction is intentionally lightweight and emotional rather than numerical:
+
+- Pet: the user strokes the pet and receives a pleased animation and short response.
+- Feed: the user gives the pet a snack directly; there is no treat inventory or hunger meter.
+- Ball: the user performs one short toss-and-return animation; there is no physics game or score.
+- Ask for comfort: the user can trigger one gentle response without the app attempting to infer mental state.
+
+Interactions temporarily change animation and mood, then return to the state derived from the timer or reminder. They never delay an alarm, focus completion, or off-work reminder. No absence, missed interaction, or closed-app time creates a negative mood.
+
+Acceptance criteria:
+
+- Each interaction starts with one click or menu choice and finishes or can be dismissed within 20 seconds.
+- A higher-priority reminder interrupts the interaction and is presented exactly once.
+- Closing and reopening the app does not create unfinished interaction state.
+- Disabling pet interactions leaves all timer, alarm, and reminder behavior intact.
+
+### Voice
+
+The first release has one voice identity: a soft, playful work companion who can sound cheerful, caring, teasing, sleepy, or mildly annoyed without becoming a different character.
+
+Voice is intentionally simple:
+
+- Key reminder lines are generated during production and bundled as local audio files.
+- There is no runtime TTS request, streaming speech, precise viseme lip sync, or per-user voice generation.
+- While a clip plays, the pet uses a simple speaking animation with closed, slightly open, and open mouth states driven by audio level.
+- Generic voice lines are paired with event categories; task titles and user-written alarm labels remain visible text only.
+- Voice defaults to key moments: focus completion, break start, alarm, and the first off-work reminder.
+- Users can choose voice off, key moments, or every shipped copy event, and can set voice volume.
+- A speech queue prevents clips from overlapping. A newer high-priority reminder may replace a low-priority idle line.
+
+Example voice direction:
+
+- Identity: soft and slightly mischievous, not artificially high-pitched.
+- Pace: conversational and concise.
+- Cheerful: brighter delivery for task completion.
+- Caring: gentler delivery for breaks.
+- Teasing: dry timing for humorous reminders.
+- Annoyed: energetic but never hostile for ignored off-work reminders.
+
+Emotional delivery IDs use the same voice identity:
+
+- `happy`: excited praise after task completion.
+- `cute`: playful invitation to rest or play.
+- `comfort`: gentle encouragement and the manual comfort interaction.
+- `sarcastic`: light humorous teasing.
+- `angry`: playful frustration after repeated ignored reminders.
+- `sleepy`: tired companionship during late work and off-work reminders.
+
+Acceptance criteria:
+
+- The same character voice is recognizable across all emotional deliveries.
+- Core reminders still work visually when audio is muted or unavailable.
+- No two voice clips play at the same time.
+- Every bundled audio reference is validated at build time.
+
+Core companion asset inventory:
+
+- At least one reviewed animation for every required pet state and interaction listed above.
+- At least three reviewed Chinese lines for focus start, focus completion, break invite, alarm, off-work soft, and off-work annoyed.
+- At least one bundled voice clip for each default voice moment: focus completion, break start, alarm, and first off-work reminder.
+- Product review must approve the character silhouette, motion, writing, and voice together before the companion is considered release-ready.
 
 ### Humor And Reminder Copy
 
 The first release uses built-in copy instead of AI generation.
 
-Tone options:
-
-- Cute encouragement.
-- Witty roast.
-- Mild absurd.
-- Healing companion.
-- Random.
+The writing uses one coherent personality with several event-appropriate deliveries: cheerful encouragement, caring reminders, light teasing, mild absurdity, and playful annoyance.
 
 Copy categories:
 
 - Focus start.
-- Mid-focus encouragement.
 - Focus completion reward.
+- Alarm reminder.
 - Short break.
-- Long break.
-- Hydration.
-- Stretch.
 - Off-work reminder.
 - Off-work escalation.
 
@@ -129,8 +245,8 @@ Example copy:
 
 Acceptance criteria:
 
-- Every reminder event can resolve to a copy line for the selected tone.
-- Random tone does not repeat the same line twice in a row for the same event.
+- Every reminder event can resolve to a copy line and emotional delivery.
+- The same line does not repeat twice in a row for the same event.
 - Copy is local, editable in future versions, and not fetched from network.
 
 ### Rewards
@@ -140,7 +256,6 @@ The first release has lightweight rewards:
 - A pet celebration animation or state.
 - A praise line.
 - A local daily completion count.
-- A simple badge label for milestones such as 1, 3, and 5 sessions in one day.
 
 Acceptance criteria:
 
@@ -154,41 +269,19 @@ Users can configure:
 
 - Work days.
 - Off-work time.
-- First reminder action.
 - Escalation interval.
 - Snooze duration.
-- Maximum escalation level.
-
-Supported off-work actions:
-
-- Lie down: pet lies on the desktop.
-- Play dead: pet dramatically collapses with a humorous bubble.
-- Block work: pet moves to a more central position with a stronger prompt.
-- Lights out: screen overlay darkens the app's visible pet scene, without changing system brightness in the first release.
-- Random action.
+- Whether the pet may become mildly annoyed after reminders are ignored.
 
 Default rule:
 
 - Work days: Monday to Friday.
 - Off-work time: 18:30.
 - Snooze: 15 minutes.
-- Default action: lie down.
-- Escalation: every 15 minutes, but only within non-intrusive actions by default.
-- Strong reminders: block work and lights out are opt-in. They are never enabled by default.
-- Enabling strong reminders makes Level 3 actions selectable and allows Level 3 to appear in the default escalation sequence.
-
-Escalation levels:
-
-- Level 0, gentle: speech bubble only.
-- Level 1, soft pet action: pet lies down near its current desktop position.
-- Level 2, dramatic but non-blocking: pet plays dead or performs a larger animation near the edge of the screen.
-- Level 3, strong reminder: pet moves toward the center or shows a lights-out overlay. This level is only available when the user enables strong reminders.
-
-Default escalation sequence:
-
-- If strong reminders are disabled: Level 0 -> Level 1 -> Level 2, then repeat Level 2 at the configured escalation interval.
-- If strong reminders are enabled: Level 0 -> Level 1 -> Level 2 -> Level 3, then repeat Level 3 at the configured escalation interval.
-- Snooze resets the visible reminder and schedules the next reminder at the selected snooze interval without increasing the level.
+- First action: pet asks the user to stop and rest.
+- Escalation: after 15 minutes, the pet may become grumpy, lie down, or play dead near its current position.
+- The first release never changes system brightness, sleeps the display, or blocks the entire screen.
+- Snooze clears the visible reminder and schedules the next reminder at the selected interval without making the pet more annoyed.
 - Dismiss for the day sets reminder state to DismissedForDay and stops escalation until the next configured work day.
 
 Acceptance criteria:
@@ -196,7 +289,7 @@ Acceptance criteria:
 - Off-work reminders respect configured days and time.
 - Snooze delays the next reminder by the chosen interval.
 - The user can dismiss reminders for the day.
-- Intrusive actions are opt-in and reversible.
+- Ignored reminders may change the pet's emotion without preventing computer use.
 
 ## User Flow
 
@@ -208,22 +301,25 @@ Acceptance criteria:
 6. Timer completes.
 7. Pet celebrates and shows a reward line.
 8. App prompts the user to rest.
-9. At configured off-work time, pet performs the chosen off-work reminder action.
-10. User can snooze, dismiss for the day, or open settings.
+9. A configured alarm can independently trigger the pet and a local notification.
+10. At configured off-work time, the pet asks the user to stop; if ignored, it may become playfully annoyed.
+11. Between work events, the user can pet, feed, play ball with, or ask the pet for comfort.
+12. User can snooze, dismiss for the day, mute voice, or open settings.
 
 ## Settings
 
 Required settings:
 
 - Timer preset and custom durations.
-- Pet style.
-- Humor tone.
-- Reminder categories enabled or disabled.
+- Alarm list and recurrence.
+- Alarm snooze duration, defaulting to 10 minutes.
+- Off-work snooze duration, defaulting to 15 minutes.
+- Voice mode and volume.
+- Optional companion copy categories enabled or disabled. User-created alarms are enabled per alarm and are not affected by this switch.
 - Off-work days.
 - Off-work time.
-- Off-work action.
-- Snooze duration.
-- Escalation level.
+- Playful annoyance after ignored reminders.
+- Pet interactions enabled or disabled.
 - Launch at login.
 - Menu bar visibility.
 
@@ -245,10 +341,26 @@ Pet state:
 - Idle.
 - Focus.
 - Reward.
-- Break.
+- BreakInvite.
+- BreakIgnoredSoft.
+- BreakIgnoredAnnoyed.
+- Alarm.
 - OffWorkSoft.
-- OffWorkEscalated.
+- OffWorkAnnoyed.
+- PlayPet.
+- PlayFeed.
+- PlayBall.
+- Comfort.
+- Speaking overlay.
 - Hidden.
+
+Alarm state:
+
+- Scheduled.
+- Fired.
+- Snoozed.
+- Dismissed.
+- Disabled.
 
 Reminder state:
 
@@ -260,24 +372,33 @@ Reminder state:
 
 State transitions should be event-driven. Timer events, reminder events, and user actions should each produce a clear state transition to avoid duplicate rewards or reminder loops.
 
+Event presentation priority:
+
+| Priority | Event |
+| --- | --- |
+| 1 | User-created alarm |
+| 2 | Focus completion reward |
+| 3 | Off-work reminder |
+| 4 | Break start |
+| 5 | Focus start and idle reactions |
+| 6 | User-started intimate interaction |
+
+Every event is durably recorded before presentation. A higher-priority event may interrupt pet animation and voice; interrupted durable events return to the presentation queue. After a one-shot event finishes, the pet restores the current timer-derived state. Stale optional idle reactions may be dropped, but alarms and completion rewards may never be dropped or duplicated.
+
 ## Technical Recommendation
 
-Use Tauri for the first macOS implementation.
-
-Reasons:
-
-- Small app size.
-- Good fit for a Rust shell plus web UI.
-- Supports transparent and always-on-top windows.
-- Can manage menu bar/tray style controls and local storage.
+Use native SwiftUI and AppKit for the first macOS implementation. The pet lives in a transparent, non-activating `NSPanel`; settings use SwiftUI. Use Rive for the hand-drawn pet state machine behind a small renderer adapter so animation runtime changes do not affect timer and reminder logic.
 
 Suggested implementation layers:
 
-- Desktop shell: Tauri window management, menu bar, launch-at-login integration, local file storage.
-- App state: timer state, pet state, reminder rules, and settings.
-- UI: control window and floating pet window.
-- Copy engine: local copy library, tone selection, and no-repeat selection.
-- Scheduler: local reminders for Pomodoro breaks and off-work rules.
+- `TimerEngine`: pure Swift focus and break state using persisted target times.
+- `AlarmScheduler`: alarm recurrence plus `UNUserNotificationCenter` fallback.
+- `PetDirector`: maps timer, alarm, and user events to pet emotion, animation, copy, and voice IDs.
+- `PetRenderer`: adapter around a pinned Rive Apple runtime version.
+- `VoicePlayer`: local audio playback, priority queue, volume, and simple audio-level mouth motion.
+- `PetPanel`: transparent AppKit panel, drag handling, screen-edge clamping, and visibility.
+- `SettingsStore`: local settings, timer recovery state, alarms, and pet position.
+- `LoginItemService`: optional launch at login through `SMAppService`.
 
 ## Data
 
@@ -288,6 +409,7 @@ All first-release data is local:
 - Daily completion count.
 - Last pet position.
 - Last used reminder copy per category.
+- Alarm definitions and pending snooze state.
 
 No personal productivity data leaves the machine in the first release.
 
@@ -295,20 +417,23 @@ No personal productivity data leaves the machine in the first release.
 
 - If settings are missing or corrupt, fall back to defaults.
 - If a pet asset fails to load, show a simple fallback pet shape and a recovery message.
+- If a voice asset is missing or playback fails, continue the visual reminder silently.
 - If off-work scheduling fails, keep manual timer behavior available.
 - If the floating window cannot become always-on-top, show a clear settings-window warning.
 
 ## Prototype Scope
 
-The HTML prototype is phase 1 of the design deliverables. It demonstrates product behavior and interaction shape. It is not production code and does not need to match the future Tauri implementation internals.
+The HTML prototype is phase 1 of the design deliverables. It demonstrates product behavior and interaction shape. It is not production code and does not need to match the future native macOS implementation internals.
 
-The HTML prototype should show:
+The next HTML prototype revision should show:
 
 - A simulated macOS desktop surface.
 - A floating pet preview with speech bubble.
 - A Pomodoro control panel.
-- A settings panel for pet style, tone, off-work time, and off-work action.
-- Buttons to simulate focus complete, break reminder, and off-work reminder.
+- Alarm setup and a voice mode control.
+- Buttons to simulate focus complete, alarm, break reminder, and ignored off-work reminder.
+- One coherent pet personality rather than selectable visual styles.
+- A small preview of pet, direct-feed, and ball interactions, clearly secondary to the timer and alarm flow.
 
 The prototype is not expected to implement real macOS floating-window behavior.
 
@@ -317,10 +442,13 @@ The prototype is not expected to implement real macOS floating-window behavior.
 The implementation plan should include:
 
 - Unit tests for timer transitions.
+- Unit tests for one-off and recurring alarms, snooze, deletion, daylight-saving changes, and sleep/wake recovery.
 - Unit tests for copy selection and no-repeat behavior.
+- Unit tests for voice priority, no-overlap behavior, and missing-asset fallback.
 - Unit tests for off-work rule matching, snooze, and dismiss-for-day.
+- Unit tests for event priority, interruption, state restoration, and occurrence-ledger deduplication.
 - UI tests for core flows in the control window.
-- Manual macOS QA for floating window behavior, drag persistence, launch at login, and reminder visibility.
+- Manual macOS QA for floating window behavior, drag persistence, launch at login, reminder visibility, voice playback, and all four intimate interactions.
 
 Release should not be considered ready until these core checks pass:
 
@@ -329,8 +457,10 @@ Release should not be considered ready until these core checks pass:
 - Break reminder appears after focus completion.
 - Break timer can start, pause, resume, skip, and end without creating another reward.
 - Off-work reminder appears at the configured time.
+- One-off and repeating alarms fire once per occurrence and cancel correctly.
 - Snooze and dismiss-for-day work.
 - Pet can be dragged, hidden, and restored.
+- A 24-hour soak run completes with scheduled alarms, at least one sleep/wake cycle, no duplicate presentation, and no timer drift beyond the defined recovery rules.
 
 ## Open Product Decisions
 
@@ -338,15 +468,18 @@ Release should not be considered ready until these core checks pass:
 
 Resolved first-release decisions:
 
-- Visual styles: ship three bundled styles: pixel, hand-drawn, and 3D chibi.
-- Off-work defaults: start with the non-intrusive lie-down action. Strong reminders are opt-in.
+- Product core: Pomodoro and alarm reminders plus emotional companionship.
+- Visual scope: ship one high-quality hand-drawn animated pet.
+- Voice scope: ship one consistent voice with several emotional deliveries, using bundled audio only.
+- Interaction scope: ship pet, direct-feed, ball, and manual comfort interactions without progression systems.
+- Off-work defaults: use non-intrusive speech, grumpy, lie-down, and play-dead actions only.
 - Language scope: Chinese-only copy and UI for the first release. Bilingual support can be added later.
 
 ## Milestones
 
 1. Product design and HTML prototype.
-2. Tauri project scaffold and static pet window proof of concept.
-3. Timer and local settings.
-4. Reminder copy engine and reward events.
-5. Off-work reminders and escalation.
-6. macOS packaging and QA.
+2. Native macOS project and animated pet-panel proof of concept.
+3. Timer, alarm scheduler, and local settings.
+4. Pet director, built-in copy, and bundled voice playback.
+5. Off-work companionship, ignored-reminder emotion, and short intimate interactions.
+6. macOS packaging, long-running reliability tests, and QA.
