@@ -1,0 +1,716 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pomopet macOS Prototype</title>
+  <style>
+    :root {
+      --ink: #242021;
+      --muted: #71686d;
+      --line: #ded8d2;
+      --paper: #fffaf2;
+      --panel: rgba(255, 250, 242, 0.94);
+      --mint: #78c6a3;
+      --tomato: #f26d5b;
+      --lemon: #ffd166;
+      --sky: #83c5df;
+      --lavender: #b8a1dd;
+      --shadow: 0 18px 45px rgba(55, 38, 31, 0.16);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--ink);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background:
+        linear-gradient(135deg, rgba(120, 198, 163, 0.22), transparent 34%),
+        linear-gradient(45deg, transparent 58%, rgba(242, 109, 91, 0.18)),
+        #f4eee6;
+    }
+
+    button,
+    input,
+    select {
+      font: inherit;
+    }
+
+    button {
+      border: 1px solid rgba(36, 32, 33, 0.12);
+      color: var(--ink);
+      background: #fffaf2;
+      border-radius: 8px;
+      padding: 10px 12px;
+      cursor: pointer;
+      transition: transform 120ms ease, box-shadow 120ms ease, background 120ms ease;
+    }
+
+    button:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 8px 18px rgba(36, 32, 33, 0.12);
+    }
+
+    .app {
+      min-height: 100vh;
+      padding: 24px;
+      display: grid;
+      grid-template-columns: minmax(280px, 1fr) minmax(360px, 520px) minmax(300px, 380px);
+      gap: 18px;
+      align-items: stretch;
+    }
+
+    .desktop,
+    .timer,
+    .settings,
+    .copy-bank {
+      background: var(--panel);
+      border: 1px solid rgba(36, 32, 33, 0.1);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+    }
+
+    .desktop {
+      position: relative;
+      overflow: hidden;
+      min-height: 680px;
+      background:
+        linear-gradient(rgba(255, 255, 255, 0.58), rgba(255, 255, 255, 0.42)),
+        repeating-linear-gradient(0deg, rgba(36, 32, 33, 0.04), rgba(36, 32, 33, 0.04) 1px, transparent 1px, transparent 36px),
+        repeating-linear-gradient(90deg, rgba(36, 32, 33, 0.035), rgba(36, 32, 33, 0.035) 1px, transparent 1px, transparent 36px),
+        #e8f2ed;
+    }
+
+    .desktop-topbar {
+      height: 34px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 12px;
+      color: rgba(36, 32, 33, 0.62);
+      background: rgba(255, 255, 255, 0.55);
+      border-bottom: 1px solid rgba(36, 32, 33, 0.08);
+      font-size: 12px;
+    }
+
+    .dot {
+      width: 11px;
+      height: 11px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+
+    .red { background: #ff6b60; }
+    .yellow { background: #f7c948; }
+    .green { background: #55c878; }
+
+    .desktop-label {
+      margin-left: auto;
+    }
+
+    .pet-stage {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: min(80%, 360px);
+      transform: translate(-50%, -50%);
+      display: grid;
+      justify-items: center;
+      gap: 16px;
+    }
+
+    .bubble {
+      min-height: 78px;
+      width: min(100%, 340px);
+      padding: 16px 18px;
+      border-radius: 8px;
+      border: 2px solid rgba(36, 32, 33, 0.14);
+      background: #fffef9;
+      box-shadow: 0 12px 22px rgba(36, 32, 33, 0.12);
+      line-height: 1.55;
+      position: relative;
+    }
+
+    .bubble::after {
+      content: "";
+      position: absolute;
+      left: 46%;
+      bottom: -12px;
+      width: 20px;
+      height: 20px;
+      background: #fffef9;
+      border-right: 2px solid rgba(36, 32, 33, 0.14);
+      border-bottom: 2px solid rgba(36, 32, 33, 0.14);
+      transform: rotate(45deg);
+    }
+
+    .pet {
+      width: 210px;
+      height: 180px;
+      position: relative;
+      filter: drop-shadow(0 20px 22px rgba(42, 32, 28, 0.16));
+      transition: transform 180ms ease;
+    }
+
+    .pet-body {
+      position: absolute;
+      left: 30px;
+      bottom: 22px;
+      width: 150px;
+      height: 118px;
+      background: #ffe1a8;
+      border: 4px solid #483a32;
+      border-radius: 48% 48% 42% 42%;
+    }
+
+    .pet-ear {
+      position: absolute;
+      top: 28px;
+      width: 52px;
+      height: 58px;
+      background: #ffd58f;
+      border: 4px solid #483a32;
+      border-radius: 16px 16px 8px 8px;
+      transform: rotate(45deg);
+    }
+
+    .pet-ear.left {
+      left: 42px;
+    }
+
+    .pet-ear.right {
+      right: 42px;
+      transform: rotate(-45deg);
+    }
+
+    .pet-face {
+      position: absolute;
+      left: 58px;
+      bottom: 58px;
+      width: 94px;
+      height: 62px;
+    }
+
+    .eye {
+      position: absolute;
+      top: 12px;
+      width: 13px;
+      height: 18px;
+      background: #332b29;
+      border-radius: 50%;
+    }
+
+    .eye.left { left: 20px; }
+    .eye.right { right: 20px; }
+
+    .mouth {
+      position: absolute;
+      left: 50%;
+      top: 34px;
+      width: 30px;
+      height: 14px;
+      border-bottom: 4px solid #332b29;
+      border-radius: 0 0 18px 18px;
+      transform: translateX(-50%);
+    }
+
+    .paw {
+      position: absolute;
+      bottom: 14px;
+      width: 42px;
+      height: 26px;
+      background: #fff0c9;
+      border: 4px solid #483a32;
+      border-radius: 50%;
+    }
+
+    .paw.left { left: 50px; }
+    .paw.right { right: 50px; }
+
+    .action-lie .pet {
+      transform: rotate(90deg) translateX(6px);
+    }
+
+    .action-dead .pet {
+      transform: rotate(90deg) translateX(6px);
+    }
+
+    .action-dead .eye {
+      width: 18px;
+      height: 18px;
+      background: transparent;
+    }
+
+    .action-dead .eye::before,
+    .action-dead .eye::after {
+      content: "";
+      position: absolute;
+      left: 8px;
+      top: 0;
+      width: 3px;
+      height: 18px;
+      background: #332b29;
+      border-radius: 2px;
+    }
+
+    .action-dead .eye::before { transform: rotate(45deg); }
+    .action-dead .eye::after { transform: rotate(-45deg); }
+
+    .action-block .pet-stage {
+      top: 43%;
+      width: min(92%, 430px);
+    }
+
+    .action-block .pet {
+      transform: scale(1.22);
+    }
+
+    .action-lights .desktop {
+      background:
+        linear-gradient(rgba(23, 25, 31, 0.72), rgba(23, 25, 31, 0.72)),
+        repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.05) 1px, transparent 1px, transparent 36px),
+        #1d2028;
+    }
+
+    .section {
+      padding: 20px;
+    }
+
+    .timer {
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    h1,
+    h2,
+    h3,
+    p {
+      margin-top: 0;
+    }
+
+    h1 {
+      font-size: 30px;
+      line-height: 1.08;
+      margin-bottom: 8px;
+      letter-spacing: 0;
+    }
+
+    h2 {
+      font-size: 18px;
+      margin-bottom: 12px;
+    }
+
+    h3 {
+      font-size: 14px;
+      margin-bottom: 8px;
+      color: var(--muted);
+    }
+
+    .muted {
+      color: var(--muted);
+      line-height: 1.6;
+    }
+
+    .clock {
+      border: 1px solid rgba(36, 32, 33, 0.1);
+      background: #fffef9;
+      border-radius: 8px;
+      padding: 24px;
+      display: grid;
+      gap: 18px;
+    }
+
+    .time {
+      font-size: clamp(52px, 8vw, 82px);
+      line-height: 0.95;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: 0;
+    }
+
+    .task-input {
+      width: 100%;
+      border: 1px solid rgba(36, 32, 33, 0.16);
+      border-radius: 8px;
+      padding: 12px 14px;
+      background: #fffaf2;
+      color: var(--ink);
+    }
+
+    .button-row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .primary {
+      background: var(--tomato);
+      color: #fff;
+      border-color: rgba(36, 32, 33, 0.08);
+      font-weight: 700;
+    }
+
+    .secondary {
+      background: #eef8f2;
+    }
+
+    .mini-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .stat {
+      padding: 12px;
+      border: 1px solid rgba(36, 32, 33, 0.1);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.58);
+    }
+
+    .stat strong {
+      display: block;
+      font-size: 22px;
+    }
+
+    .settings {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .field {
+      display: grid;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+
+    label {
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    select,
+    input[type="time"],
+    input[type="number"] {
+      width: 100%;
+      border: 1px solid rgba(36, 32, 33, 0.16);
+      border-radius: 8px;
+      padding: 10px 12px;
+      background: #fffef9;
+      color: var(--ink);
+    }
+
+    .tone-row,
+    .style-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+    }
+
+    .chip {
+      text-align: center;
+      padding: 10px 8px;
+      border-radius: 8px;
+      border: 1px solid rgba(36, 32, 33, 0.12);
+      background: rgba(255, 255, 255, 0.54);
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .chip.active {
+      background: #dbf2e8;
+      border-color: rgba(120, 198, 163, 0.9);
+      font-weight: 800;
+    }
+
+    .copy-bank {
+      grid-column: 2 / 4;
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      padding: 14px;
+    }
+
+    .copy-card {
+      min-height: 100px;
+      border-radius: 8px;
+      padding: 13px;
+      border: 1px solid rgba(36, 32, 33, 0.1);
+      background: #fffef9;
+      line-height: 1.52;
+    }
+
+    .copy-card b {
+      display: block;
+      margin-bottom: 6px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    @media (max-width: 1100px) {
+      .app {
+        grid-template-columns: 1fr;
+      }
+
+      .desktop {
+        min-height: 560px;
+      }
+
+      .copy-bank {
+        grid-column: auto;
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+
+    @media (max-width: 640px) {
+      .app {
+        padding: 12px;
+      }
+
+      .copy-bank,
+      .mini-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .tone-row,
+      .style-row {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="app" id="app">
+    <section class="desktop" aria-label="桌面萌宠预览">
+      <div class="desktop-topbar">
+        <span class="dot red"></span>
+        <span class="dot yellow"></span>
+        <span class="dot green"></span>
+        <span>Pomopet floating pet preview</span>
+        <span class="desktop-label">macOS desktop</span>
+      </div>
+      <div class="pet-stage">
+        <div class="bubble" id="bubble">今天的目标写在番茄里，别写在焦虑里。准备好了我就趴下陪你。</div>
+        <div class="pet" aria-label="可爱桌面宠物">
+          <div class="pet-ear left"></div>
+          <div class="pet-ear right"></div>
+          <div class="pet-body"></div>
+          <div class="pet-face">
+            <span class="eye left"></span>
+            <span class="eye right"></span>
+            <span class="mouth"></span>
+          </div>
+          <span class="paw left"></span>
+          <span class="paw right"></span>
+        </div>
+      </div>
+    </section>
+
+    <section class="timer section" aria-label="番茄钟控制">
+      <div>
+        <h1>Pomopet</h1>
+        <p class="muted">一个会陪你专注、夸你完成、到点催你下班的 macOS 桌面小宠。</p>
+      </div>
+
+      <div class="clock">
+        <div>
+          <h2>当前小任务</h2>
+          <input class="task-input" value="把产品设计文档写到可以开工" aria-label="当前小任务">
+        </div>
+        <div class="time" id="time">25:00</div>
+        <div class="button-row">
+          <button class="primary" id="startBtn">开始专注</button>
+          <button id="pauseBtn">暂停</button>
+          <button class="secondary" id="completeBtn">完成任务</button>
+        </div>
+      </div>
+
+      <div class="mini-grid">
+        <div class="stat">
+          <strong id="sessions">3</strong>
+          今日番茄
+        </div>
+        <div class="stat">
+          <strong id="streak">5</strong>
+          连续天数
+        </div>
+        <div class="stat">
+          <strong>18:30</strong>
+          下班提醒
+        </div>
+      </div>
+
+      <div>
+        <h2>状态演示</h2>
+        <div class="button-row">
+          <button data-sim="reward">任务完成奖励</button>
+          <button data-sim="break">休息提醒</button>
+          <button data-sim="offwork">下班到点</button>
+          <button data-sim="reset">恢复待机</button>
+        </div>
+      </div>
+    </section>
+
+    <aside class="settings section" aria-label="配置面板">
+      <div>
+        <h2>配置</h2>
+        <p class="muted">第一版所有配置都存在本地，宠物怎么提醒你，由你说了算。</p>
+      </div>
+
+      <div class="field">
+        <label>宠物风格</label>
+        <div class="style-row" id="styles">
+          <span class="chip active" data-style="pixel">像素风</span>
+          <span class="chip" data-style="drawn">手绘风</span>
+          <span class="chip" data-style="chibi">3D Q 版</span>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>互动语气</label>
+        <div class="tone-row" id="tones">
+          <span class="chip active" data-tone="cute">可爱</span>
+          <span class="chip" data-tone="roast">毒舌</span>
+          <span class="chip" data-tone="absurd">发疯</span>
+          <span class="chip" data-tone="healing">治愈</span>
+          <span class="chip" data-tone="random">随机</span>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="preset">番茄钟</label>
+        <select id="preset">
+          <option>25 分钟专注 / 5 分钟休息</option>
+          <option>50 分钟专注 / 10 分钟休息</option>
+          <option>自定义</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="offtime">下班提醒时间</label>
+        <input id="offtime" type="time" value="18:30">
+      </div>
+
+      <div class="field">
+        <label for="action">到点动作</label>
+        <select id="action">
+          <option value="lie">躺在桌面上</option>
+          <option value="dead">装死碰瓷</option>
+          <option value="block">挡在桌面前</option>
+          <option value="lights">关灯氛围</option>
+          <option value="random">随机动作</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="snooze">延后提醒</label>
+        <select id="snooze">
+          <option>15 分钟</option>
+          <option>30 分钟</option>
+          <option>60 分钟</option>
+          <option>今天不提醒</option>
+        </select>
+      </div>
+    </aside>
+
+    <section class="copy-bank" aria-label="文案库预览">
+      <div class="copy-card"><b>完成奖励</b>番茄完成！奖励你一枚看不见但很有分量的小勋章。</div>
+      <div class="copy-card"><b>休息提醒</b>站起来走两步吧，你的脖子已经在提交离职申请了。</div>
+      <div class="copy-card"><b>下班提醒</b>下班啦。再不走，我就躺在屏幕上碰瓷。</div>
+      <div class="copy-card"><b>升级提醒</b>你可以加班，但我已经下班了。我先倒。</div>
+    </section>
+  </main>
+
+  <script>
+    const app = document.getElementById("app");
+    const bubble = document.getElementById("bubble");
+    const action = document.getElementById("action");
+    const time = document.getElementById("time");
+    const sessions = document.getElementById("sessions");
+
+    const lines = {
+      start: "今天的目标写在番茄里，别写在焦虑里。准备好了我就趴下陪你。",
+      reward: "番茄完成！奖励你一枚看不见但很有分量的小勋章。",
+      break: "站起来走两步吧，你的脖子已经在提交离职申请了。",
+      offwork: "下班啦。再不走，我就躺在屏幕上碰瓷。",
+      reset: "我已恢复待机。你工作，我营业，可爱是一种职业素养。"
+    };
+
+    function clearActions() {
+      app.classList.remove("action-lie", "action-dead", "action-block", "action-lights");
+    }
+
+    function setAction(mode) {
+      clearActions();
+      if (mode === "lie") app.classList.add("action-lie");
+      if (mode === "dead") app.classList.add("action-dead");
+      if (mode === "block") app.classList.add("action-block");
+      if (mode === "lights") app.classList.add("action-lights");
+    }
+
+    document.querySelectorAll("[data-sim]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const mode = button.dataset.sim;
+        if (mode === "reward") {
+          clearActions();
+          bubble.textContent = lines.reward;
+          sessions.textContent = String(Number(sessions.textContent) + 1);
+          time.textContent = "00:00";
+        }
+        if (mode === "break") {
+          clearActions();
+          bubble.textContent = lines.break;
+          time.textContent = "05:00";
+        }
+        if (mode === "offwork") {
+          const selected = action.value === "random" ? ["lie", "dead", "block", "lights"][Math.floor(Math.random() * 4)] : action.value;
+          setAction(selected);
+          bubble.textContent = lines.offwork;
+        }
+        if (mode === "reset") {
+          clearActions();
+          bubble.textContent = lines.reset;
+          time.textContent = "25:00";
+        }
+      });
+    });
+
+    document.getElementById("startBtn").addEventListener("click", () => {
+      clearActions();
+      bubble.textContent = lines.start;
+      time.textContent = "24:59";
+    });
+
+    document.getElementById("pauseBtn").addEventListener("click", () => {
+      bubble.textContent = "暂停一下也算战术动作，不算投降。";
+    });
+
+    document.getElementById("completeBtn").addEventListener("click", () => {
+      clearActions();
+      bubble.textContent = lines.reward;
+      sessions.textContent = String(Number(sessions.textContent) + 1);
+      time.textContent = "00:00";
+    });
+
+    document.querySelectorAll(".chip").forEach((chip) => {
+      chip.addEventListener("click", () => {
+        const group = chip.parentElement;
+        group.querySelectorAll(".chip").forEach((item) => item.classList.remove("active"));
+        chip.classList.add("active");
+        if (chip.dataset.tone) {
+          bubble.textContent = `已切换到${chip.textContent}语气。放心，我会把提醒说得像提醒，不像绩效面谈。`;
+        }
+        if (chip.dataset.style) {
+          bubble.textContent = `已选择${chip.textContent}。可爱风格加载中，理智正在让路。`;
+        }
+      });
+    });
+  </script>
+</body>
+</html>
