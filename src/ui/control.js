@@ -1,4 +1,4 @@
-import { companionPoseSrc } from './asset-paths.js';
+import { companionAnimationSrc, companionPoseSrc } from './asset-paths.js';
 
 const api = window.pomopet || createBrowserBridge();
 const $ = (selector) => document.querySelector(selector);
@@ -7,7 +7,8 @@ let state; let selectedPreset = '25/5';
 let previewTimer;
 let clockSkewMs = 0;
 const weekdays = ['日', '一', '二', '三', '四', '五', '六'];
-const interactionPoses = { interactionPet: 'pet', interactionFeed: 'feed', interactionBall: 'ball', comfort: 'pet' };
+const interactionPoses = { interactionPet: 'pet', interactionFeed: 'feed', interactionBall: 'ball', comfort: 'comfort' };
+const alarmPoseLabels = { alarm: '认真喊你', water: '喝水提醒', ball: '叼球催动', reward: '开心庆祝', sleepy: '温柔叫醒' };
 
 function createBrowserBridge() {
   const demo = { now: Date.now(), timer: { status: 'idle', phase: 'focus', remainingMs: 25 * 60_000, targetAt: null, todayCount: 0 }, alarms: [], offwork: { enabled: true, time: '18:30', weekdays: [1, 2, 3, 4, 5], pose: 'sleepy', snoozeMinutes: 15, escalateMinutes: 15, allowAnnoyed: true }, settings: { preset: '25/5', customFocus: 25, customBreak: 5, voiceMode: 'key', volume: .75, interactions: true, launchAtLogin: false } };
@@ -42,7 +43,7 @@ function render(next) {
 function renderAlarms() {
   $('#alarmList').innerHTML = state.alarms.length ? state.alarms.map((alarm) => {
     const expired = alarm.type === 'once' && alarm.at <= state.now;
-    const timing = (expired ? '已响过 · ' : '') + recurrence(alarm);
+    const timing = (expired ? '已响过 · ' : '') + recurrence(alarm) + ' · ' + (alarmPoseLabels[alarm.pose || 'alarm'] || alarmPoseLabels.alarm);
     return '<article class="alarm-item"><input class="alarm-enabled" data-id="' + alarm.id + '" type="checkbox" ' + (alarm.enabled ? 'checked' : '') + (expired ? ' disabled title="请先编辑为未来时间"' : '') + '><div class="alarm-meta"><strong>' + escapeHtml(alarm.label) + '</strong><small>' + timing + '</small></div><div class="alarm-tools"><button data-edit="' + alarm.id + '">编辑</button><button data-delete="' + alarm.id + '">删除</button></div></article>';
   }).join('') : '<div class="empty">还没有闹钟。末末目前只负责准时可爱。</div>';
   $$('.alarm-enabled').forEach((input) => input.onchange = () => command('alarm:enabled', { id: input.dataset.id, enabled: input.checked }));
@@ -59,10 +60,12 @@ function renderSettings() {
 
 function openAlarmForm(alarm = null) {
   const isWeekly = alarm?.type === 'weekly'; const form = $('#alarmForm'); form.classList.remove('hidden');
-  form.innerHTML = '<input id="alarmLabel" maxlength="30" placeholder="提醒标签" value="' + escapeHtml(alarm?.label || '') + '"><select id="alarmType"><option value="once">一次性</option><option value="weekly">每周重复</option></select><input id="alarmWhen" type="' + (isWeekly ? 'time' : 'datetime-local') + '" value="' + (isWeekly ? alarm.time : dateInput(alarm?.at || Date.now() + 3_600_000)) + '"><button class="primary" id="saveAlarm">保存</button><div class="weekday-row ' + (isWeekly ? '' : 'hidden') + '" id="alarmDays">' + weekdays.map((d, day) => '<button type="button" data-day="' + day + '" class="' + ((alarm?.weekdays || [1,2,3,4,5]).includes(day) ? 'on' : '') + '">' + d + '</button>').join('') + '</div>';
+  const poseOptions = Object.entries(alarmPoseLabels).map(([value, label]) => '<option value="' + value + '">' + label + '</option>').join('');
+  form.innerHTML = '<input id="alarmLabel" maxlength="30" placeholder="提醒标签" value="' + escapeHtml(alarm?.label || '') + '"><select id="alarmType"><option value="once">一次性</option><option value="weekly">每周重复</option></select><input id="alarmWhen" type="' + (isWeekly ? 'time' : 'datetime-local') + '" value="' + (isWeekly ? alarm.time : dateInput(alarm?.at || Date.now() + 3_600_000)) + '"><select id="alarmPose">' + poseOptions + '</select><button class="primary" id="saveAlarm">保存</button><div class="weekday-row ' + (isWeekly ? '' : 'hidden') + '" id="alarmDays">' + weekdays.map((d, day) => '<button type="button" data-day="' + day + '" class="' + ((alarm?.weekdays || [1,2,3,4,5]).includes(day) ? 'on' : '') + '">' + d + '</button>').join('') + '</div>';
   $('#alarmType').value = alarm?.type || 'once'; $('#alarmDays').querySelectorAll('button').forEach((b) => b.onclick = () => b.classList.toggle('on'));
-  $('#alarmType').onchange = () => openAlarmForm({ ...alarm, label: $('#alarmLabel').value, type: $('#alarmType').value, at: Date.now() + 3_600_000, time: '09:00', weekdays: [1,2,3,4,5] });
-  $('#saveAlarm').onclick = async () => { const type = $('#alarmType').value; const payload = { label: $('#alarmLabel').value, type, enabled: true, at: type === 'once' ? new Date($('#alarmWhen').value).getTime() : null, time: type === 'weekly' ? $('#alarmWhen').value : null, weekdays: type === 'weekly' ? $$('#alarmDays .on').map((b) => Number(b.dataset.day)) : [] }; await command(alarm?.id ? 'alarm:update' : 'alarm:add', alarm?.id ? { id: alarm.id, patch: payload } : payload); form.classList.add('hidden'); };
+  $('#alarmPose').value = alarm?.pose || 'alarm';
+  $('#alarmType').onchange = () => openAlarmForm({ ...alarm, label: $('#alarmLabel').value, pose: $('#alarmPose').value, type: $('#alarmType').value, at: Date.now() + 3_600_000, time: '09:00', weekdays: [1,2,3,4,5] });
+  $('#saveAlarm').onclick = async () => { const type = $('#alarmType').value; const payload = { label: $('#alarmLabel').value, type, pose: $('#alarmPose').value, enabled: true, at: type === 'once' ? new Date($('#alarmWhen').value).getTime() : null, time: type === 'weekly' ? $('#alarmWhen').value : null, weekdays: type === 'weekly' ? $$('#alarmDays .on').map((b) => Number(b.dataset.day)) : [] }; await command(alarm?.id ? 'alarm:update' : 'alarm:add', alarm?.id ? { id: alarm.id, patch: payload } : payload); form.classList.add('hidden'); };
 }
 function escapeHtml(value) { const span = document.createElement('span'); span.textContent = value; return span.innerHTML; }
 async function command(name, payload) {
@@ -80,7 +83,7 @@ $('#complete').onclick = () => command('timer:complete'); $('#stop').onclick = (
 $$('#presets button').forEach((b) => b.onclick = async () => { selectedPreset = b.dataset.preset; await command('settings:update', { preset: selectedPreset }); });
 $$('[data-interaction]').forEach((b) => b.onclick = () => {
   const kind = b.dataset.interaction; clearTimeout(previewTimer);
-  $('#momoPreview').src = companionPoseSrc(interactionPoses[kind]);
+  $('#momoPreview').src = companionAnimationSrc(interactionPoses[kind]);
   previewTimer = setTimeout(() => { $('#momoPreview').src = companionPoseSrc('focus'); }, 12_000);
   return command('interaction', { kind });
 }); $('#showPet').onclick = () => command('pet:visible', { visible: true });

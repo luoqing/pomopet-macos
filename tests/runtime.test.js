@@ -24,8 +24,8 @@ describe('AppRuntime', () => {
   it('routes due alarms to pet presentation and system notification', async () => {
     const clock = new FakeClock(100_000); const notify = vi.fn(); const present = vi.fn(); const store = new MemoryStore();
     const runtime = new AppRuntime({ store, clock, onPresentation: present, onNotify: notify }); await runtime.init();
-    await runtime.command('alarm:add', { id: 'tea', label: '喝茶', type: 'once', at: 101_000 }); clock.advance(1_000); await runtime.tick();
-    expect(present).toHaveBeenLastCalledWith(expect.objectContaining({ kind: 'alarm', label: '喝茶' }));
+    await runtime.command('alarm:add', { id: 'tea', label: '喝茶', type: 'once', at: 101_000, pose: 'water' }); clock.advance(1_000); await runtime.tick();
+    expect(present).toHaveBeenLastCalledWith(expect.objectContaining({ category: 'alarm', kind: 'water', label: '喝茶', voice: 'alarm' }));
     expect(notify).toHaveBeenCalledWith(expect.objectContaining({ title: expect.stringContaining('喝茶') }));
     await runtime.tick(); expect(notify).toHaveBeenCalledTimes(1);
   });

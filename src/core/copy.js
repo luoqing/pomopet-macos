@@ -29,10 +29,10 @@ export const COPY = {
     { text: '你继续装忙，我继续鼓腮。我们都有光明的未来。', emotion: 'angry' },
     { text: '很好，我已正式躺平。需要我的时候请翻面。', emotion: 'sarcastic' }
   ],
-  interactionPet: [{ text: '嗯……这里可以再摸两下。我批准了。', emotion: 'cute' }, { text: '脑袋被摸亮了，今天会有好事。', emotion: 'happy' }],
-  interactionFeed: [{ text: '嗷呜！这口算你的今日最佳投资。', emotion: 'happy' }, { text: '吃到了。现在我可以继续认真陪你了。', emotion: 'cute' }],
-  interactionBall: [{ text: '看好啦！本宠的短跑纪录只对你公开。', emotion: 'happy' }, { text: '球捡回来啦，顺便捡回一点好心情。', emotion: 'cute' }],
-  comfort: [{ text: '今天不用表现得很厉害。先坐一会儿，我陪你。', emotion: 'comfort' }, { text: '你可以慢一点。事情很多，但你只有一个。', emotion: 'comfort' }]
+  interactionPet: [{ text: '摸到头顶那撮毛了吗？那里今天负责接收好运。', emotion: 'cute' }, { text: '再摸一下，我就把今天的烦恼打包丢远一点。', emotion: 'happy' }],
+  interactionFeed: [{ text: '嗷呜！饼干到账，陪伴服务立刻续费。', emotion: 'happy' }, { text: '这块我先替你尝尝。嗯，是“继续加油”味的。', emotion: 'cute' }],
+  interactionBall: [{ text: '球来了！我冲！你负责夸，不许省略形容词。', emotion: 'happy' }, { text: '捡回来啦，还顺路捡回一点好心情。', emotion: 'cute' }],
+  comfort: [{ text: '哈哈别挠啦……可以再挠三秒。三秒是我编的。', emotion: 'happy' }, { text: '肚皮开机成功，今天的难题先变小一点。', emotion: 'comfort' }]
 };
 
 export class CopyPicker {

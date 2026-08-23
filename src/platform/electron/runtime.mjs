@@ -66,7 +66,7 @@ export class AppRuntime {
       if (event.type === 'focus-completed' && event.celebrate) this.#present({ category: 'focusComplete', kind: 'reward', priority: PRIORITY.focusComplete, durableId: event.sessionId, duration: 10_000 });
       if (event.type === 'break-started') this.#present({ category: 'break', kind: 'break', priority: PRIORITY.break, durableId: 'break:' + this.timer.state.sessionId, duration: 12_000 });
       if (event.type === 'alarm-fired') {
-        this.#present({ category: 'alarm', kind: 'alarm', priority: PRIORITY.alarm, durableId: event.occurrenceId, duration: 20_000, actions: { alarmId: event.alarmId, occurrenceId: event.occurrenceId }, label: event.label });
+        this.#present({ category: 'alarm', kind: event.pose || 'alarm', priority: PRIORITY.alarm, durableId: event.occurrenceId, duration: 20_000, actions: { alarmId: event.alarmId, occurrenceId: event.occurrenceId }, label: event.label });
         this.onNotify({ title: 'Pomopet 闹钟 · ' + event.label, body: '到点啦！这是过去的你寄来的加急小纸条。' });
       }
       if (event.type === 'offwork') {

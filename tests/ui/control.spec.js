@@ -7,10 +7,11 @@ test('control surface renders and completes browser fallback timer flow', async 
   await page.getByRole('button', { name: '开始专注' }).click(); await expect(page.getByRole('button', { name: '暂停' })).toBeVisible();
   await expect(page.locator('#clock')).toHaveText(/^24:5[89]$/);
   await page.getByRole('button', { name: '暂停' }).click(); await expect(page.getByRole('button', { name: '继续' })).toBeVisible();
-  await page.getByRole('button', { name: '喂一口' }).click();
-  await expect(page.locator('#momoPreview')).toHaveAttribute('src', /momo-feed\.png$/);
+  await page.getByRole('button', { name: '喂饼干' }).click();
+  await expect(page.locator('#momoPreview')).toHaveAttribute('src', /momo-feed\.gif$/);
   await page.getByRole('button', { name: '闹钟', exact: true }).click(); await page.getByRole('button', { name: '＋ 新闹钟' }).click();
   await expect(page.getByPlaceholder('提醒标签')).toBeVisible(); await expect(page.locator('#alarmWhen')).toHaveAttribute('type', 'datetime-local');
+  await page.locator('#alarmPose').selectOption('water'); await expect(page.locator('#alarmPose')).toHaveValue('water');
   expect(errors).toEqual([]); await page.screenshot({ path: 'artifacts/screenshots/control-window.png', fullPage: true });
 });
 
@@ -22,6 +23,7 @@ test('pet surface renders the illustrated companion without console errors', asy
   await page.getByRole('button', { name: '打开 Pomopet 小屋' }).click();
   await page.getByRole('button', { name: '喂零食' }).click();
   await expect(page.locator('#petStage')).toHaveAttribute('data-state', 'interactionFeed');
-  await expect(page.getByAltText('桌面小狗末末')).toHaveAttribute('src', /momo-feed\.png$/);
+  await expect(page.locator('#petStage')).toHaveAttribute('data-tool', 'feed');
+  await expect(page.getByAltText('桌面小狗末末')).toHaveAttribute('src', /momo-feed\.gif$/);
   await page.screenshot({ path: 'artifacts/screenshots/pet-window.png', omitBackground: true });
 });

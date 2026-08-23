@@ -25,7 +25,7 @@ export class AlarmScheduler {
   constructor(clock, alarms = [], ledger = new OccurrenceLedger()) { this.clock = clock; this.alarms = structuredClone(alarms); this.ledger = ledger; }
   add(input) {
     const alarm = { id: input.id || `alarm-${this.clock.now()}-${Math.random().toString(36).slice(2, 7)}`, label: input.label.trim() || '该休息一下啦',
-      type: input.type, at: input.at ?? null, time: input.time ?? null, weekdays: input.weekdays ?? [], enabled: input.enabled ?? true, snoozes: [] };
+      type: input.type, at: input.at ?? null, time: input.time ?? null, weekdays: input.weekdays ?? [], pose: input.pose || 'alarm', enabled: input.enabled ?? true, snoozes: [] };
     this.alarms.push(alarm); return structuredClone(alarm);
   }
   update(id, patch) { const index = this.alarms.findIndex((a) => a.id === id); if (index < 0) return null; this.alarms[index] = { ...this.alarms[index], ...structuredClone(patch) }; return structuredClone(this.alarms[index]); }
@@ -49,7 +49,7 @@ export class AlarmScheduler {
       for (const snooze of alarm.snoozes || []) if (!snooze.dismissed && snooze.dueAt <= now) candidates.push(snooze);
       for (const candidate of candidates) {
         if (now - candidate.dueAt > graceMs || !this.ledger.claim(candidate.id, now)) continue;
-        events.push({ type: 'alarm-fired', alarmId: alarm.id, occurrenceId: candidate.id, dueAt: candidate.dueAt, label: alarm.label });
+        events.push({ type: 'alarm-fired', alarmId: alarm.id, occurrenceId: candidate.id, dueAt: candidate.dueAt, label: alarm.label, pose: alarm.pose || 'alarm' });
         if (alarm.type === 'once' && candidate.dueAt === alarm.at) alarm.enabled = false;
         if (candidate.id.includes(':snooze:')) candidate.dismissed = true;
       }

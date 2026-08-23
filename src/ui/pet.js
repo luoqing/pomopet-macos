@@ -1,5 +1,5 @@
 import { BrowserVoicePlayer } from './voice-player.js';
-import { companionPoseSrc } from './asset-paths.js';
+import { companionAnimationSrc } from './asset-paths.js';
 
 const api = window.pomopet || createBrowserBridge();
 const voicePlayer = new BrowserVoicePlayer();
@@ -16,13 +16,16 @@ let motionTimer;
 
 const labels = {
   focus: '陪你专注', reward: '番茄摘到啦', break: '该休息啦', alarm: '闹钟到点',
-  offwork: '今天收工', fainted: '末末已躺平', annoyed: '末末有点鼓',
-  interactionPet: '摸摸头', interactionFeed: '开饭啦', interactionBall: '去捡球', comfort: '抱一会儿'
+  water: '喝水时间', offwork: '今天收工', fainted: '末末已躺平', annoyed: '末末有点鼓',
+  interactionPet: '摸摸头', interactionFeed: '开饭啦', interactionBall: '去抢球', comfort: '挠肚皮'
 };
 const poses = {
-  idle: 'focus', focus: 'focus', reward: 'reward', break: 'ball', alarm: 'annoyed',
+  idle: 'focus', focus: 'focus', reward: 'reward', break: 'ball', alarm: 'annoyed', water: 'water',
   offwork: 'sleepy', fainted: 'fainted', annoyed: 'annoyed', interactionPet: 'pet',
-  interactionFeed: 'feed', interactionBall: 'ball', comfort: 'pet'
+  interactionFeed: 'feed', interactionBall: 'ball', comfort: 'comfort'
+};
+const tools = {
+  interactionPet: 'pet', interactionFeed: 'feed', interactionBall: 'ball', comfort: 'tickle'
 };
 
 function createBrowserBridge() {
@@ -48,7 +51,9 @@ function baseState() {
 function setVisualState(kind) {
   const visual = poses[kind] ? kind : 'idle';
   stage.dataset.state = visual;
-  petArt.src = companionPoseSrc(poses[visual]);
+  petArt.src = companionAnimationSrc(poses[visual]);
+  if (tools[visual]) stage.dataset.tool = tools[visual];
+  else delete stage.dataset.tool;
 }
 
 function show(event) {
@@ -71,7 +76,8 @@ function show(event) {
 }
 
 function playVoice(event) {
-  if (!event.voice || state?.settings?.voiceMode === 'off') return;
+  const critical = event.category === 'alarm' || ['offwork', 'fainted', 'annoyed'].includes(event.kind);
+  if (!event.voice || (state?.settings?.voiceMode === 'off' && !critical)) return;
   voicePlayer.enqueue({ id: event.voice, priority: event.priority, volume: state.settings.volume });
 }
 
@@ -80,6 +86,11 @@ function closeActivePresentation() {
   active = null;
   speech.classList.add('hidden');
   setVisualState(baseState());
+}
+
+function trackTool(event) {
+  stage.style.setProperty('--tool-x', `${event.offsetX}px`);
+  stage.style.setProperty('--tool-y', `${event.offsetY}px`);
 }
 
 function nudgePet() {
@@ -113,11 +124,13 @@ document.querySelector('#dismissReminder').onclick = () => {
   closeActivePresentation();
 };
 document.querySelector('#petHotspot').onpointerdown = (event) => {
+  trackTool(event);
   dragStart = { x: event.screenX, y: event.screenY };
   dragged = false;
   event.currentTarget.setPointerCapture(event.pointerId);
 };
 document.querySelector('#petHotspot').onpointermove = (event) => {
+  trackTool(event);
   if (!dragStart) return;
   const delta = { x: event.screenX - dragStart.x, y: event.screenY - dragStart.y };
   if (Math.abs(delta.x) + Math.abs(delta.y) > 3) dragged = true;

@@ -5,8 +5,8 @@ import { FakeClock } from '../src/core/time.js';
 describe('AlarmScheduler', () => {
   it('fires a one-off occurrence only once and disables it', () => {
     const clock = new FakeClock(10_000); const scheduler = new AlarmScheduler(clock);
-    scheduler.add({ id: 'once', label: '喝水', type: 'once', at: 20_000 }); clock.set(20_000);
-    expect(scheduler.due()).toHaveLength(1); expect(scheduler.due()).toEqual([]);
+    scheduler.add({ id: 'once', label: '喝水', type: 'once', at: 20_000, pose: 'water' }); clock.set(20_000);
+    expect(scheduler.due()).toEqual([expect.objectContaining({ pose: 'water' })]); expect(scheduler.due()).toEqual([]);
     expect(scheduler.snapshot().alarms[0].enabled).toBe(false);
   });
 

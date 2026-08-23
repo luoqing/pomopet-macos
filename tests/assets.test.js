@@ -10,7 +10,12 @@ describe('bundled companion assets', () => {
   });
   it('contains every illustrated pet pose and the application icon', async () => {
     const poses = ['focus', 'reward', 'ball', 'sleepy', 'fainted', 'annoyed', 'pet', 'feed'];
-    const files = [...poses.map((pose) => `src/ui/public/assets/pet/momo-${pose}.png`), 'build/icon.png'];
+    const animations = [...poses, 'comfort', 'water'];
+    const files = [
+      ...poses.map((pose) => `src/ui/public/assets/pet/momo-${pose}.png`),
+      ...animations.map((pose) => `src/ui/public/assets/pet/momo-${pose}.gif`),
+      'build/icon.png'
+    ];
     for (const file of files) { await access(file); expect((await stat(file)).size).toBeGreaterThan(10_000); }
   });
   it('uses a CommonJS preload so the packaged desktop controls reach Electron IPC', async () => {

@@ -73,8 +73,15 @@ app.whenReady().then(async () => {
     store: new JsonStore(join(app.getPath('userData'), 'pomopet-state.json')),
     onState: (state) => send('state', state),
     onPresentation: (event) => {
+      const shouldWakePet = event.category === 'alarm' || ['offwork', 'fainted', 'annoyed'].includes(event.kind);
+      if (shouldWakePet && petWindow && !petWindow.isDestroyed()) {
+        petWindow.showInactive();
+        runtime.data.pet.visible = true;
+        runtime.persist().catch(console.error);
+        refreshTray();
+      }
       if (runtime.data.pet.visible && petWindow?.isVisible()) send('presentation', event);
-      else if (['alarm', 'offwork', 'annoyed', 'reward'].includes(event.kind) && Notification.isSupported()) new Notification({ title: event.label ? 'Pomopet · ' + event.label : 'Pomopet 想提醒你', body: event.text }).show();
+      if (shouldWakePet && Notification.isSupported()) new Notification({ title: event.label ? 'Pomopet · ' + event.label : 'Pomopet 想提醒你', body: event.text }).show();
     },
     onNotify: () => {}
   });
