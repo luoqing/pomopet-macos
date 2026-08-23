@@ -23,7 +23,6 @@ test('pet surface renders the illustrated companion without console errors', asy
   await page.getByRole('button', { name: '打开 Pomopet 小屋' }).click();
   await page.getByRole('button', { name: '喂零食' }).click();
   await expect(page.locator('#petStage')).toHaveAttribute('data-state', 'interactionFeed');
-  await expect(page.locator('#petStage')).toHaveAttribute('data-tool', 'feed');
   await expect(page.getByAltText('桌面小狗末末')).toHaveAttribute('src', /momo-feed\.gif$/);
   await page.screenshot({ path: 'artifacts/screenshots/pet-window.png', omitBackground: true });
 });

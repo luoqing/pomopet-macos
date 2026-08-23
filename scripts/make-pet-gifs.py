@@ -33,20 +33,6 @@ def tickle_overlay(step):
     return draw
 
 
-def water_overlay(step):
-    def draw(canvas):
-        d = ImageDraw.Draw(canvas)
-        cx, cy = int(canvas.width * 0.50), int(canvas.height * 0.67)
-        bob = [0, -3, -5, -2, 0][step % 5]
-        d.rounded_rectangle((cx - 40, cy - 30 + bob, cx + 44, cy + 28 + bob), radius=14, fill=(108, 181, 221, 240), outline=(63, 126, 168, 255), width=4)
-        d.rectangle((cx - 34, cy - 22 + bob, cx + 38, cy - 6 + bob), fill=(176, 231, 250, 230))
-        d.arc((cx + 35, cy - 18 + bob, cx + 68, cy + 15 + bob), -70, 82, fill=(63, 126, 168, 255), width=5)
-        for i in range(3):
-            drop_x = cx - 18 + i * 20
-            d.ellipse((drop_x, cy - 54 + bob + i * 3, drop_x + 8, cy - 43 + bob + i * 3), fill=(124, 204, 241, 210))
-    return draw
-
-
 def save_gif(name, source, specs, durations=None):
     base = load(source)
     frames = [frame(base, **spec) for spec in specs]
@@ -97,8 +83,8 @@ save_gif("comfort", "fainted", [
     {"rotate": -1, "overlay": tickle_overlay(0)}, {"rotate": 1, "y": -2, "overlay": tickle_overlay(1)},
     {"rotate": -2, "y": 2, "overlay": tickle_overlay(2)}, {"rotate": 0, "overlay": tickle_overlay(1)},
 ])
-save_gif("water", "focus", [
-    {"scale": 1.0, "y": 0, "overlay": water_overlay(0)}, {"scale": 1.01, "y": -2, "overlay": water_overlay(1)},
-    {"scale": 1.015, "y": -4, "overlay": water_overlay(2)}, {"scale": 1.01, "y": -2, "overlay": water_overlay(3)},
-    {"scale": 1.0, "y": 0, "overlay": water_overlay(4)},
-], [100, 100, 120, 100, 130])
+save_gif("water", "water", [
+    {"scale": 1.0, "y": 0}, {"scale": 1.012, "y": -3, "rotate": -1},
+    {"scale": 1.018, "y": -5, "rotate": 1}, {"scale": 1.012, "y": -2, "rotate": -0.5},
+    {"scale": 1.0, "y": 0}, {"scale": 0.995, "y": 2},
+], [90, 90, 120, 90, 120, 120])

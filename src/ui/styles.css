@@ -467,91 +467,6 @@ footer {
   pointer-events: none;
   will-change: transform, filter;
 }
-.interaction-prop {
-  position: absolute;
-  left: var(--tool-x, 148px);
-  top: var(--tool-y, 120px);
-  z-index: 6;
-  opacity: 0;
-  pointer-events: none;
-  transform: translate(-50%, -50%);
-}
-.interaction-prop:before,
-.interaction-prop:after {
-  content: "";
-  position: absolute;
-  display: block;
-}
-.pet-stage[data-tool="pet"] .interaction-prop {
-  opacity: 1;
-  width: 42px;
-  height: 26px;
-  border-radius: 22px 22px 18px 18px;
-  background: #ffd8c8;
-  box-shadow: inset -5px -3px 0 rgba(213, 109, 92, 0.2);
-  animation: hand-pat 0.75s ease-in-out infinite;
-}
-.pet-stage[data-tool="pet"] .interaction-prop:before {
-  width: 12px;
-  height: 22px;
-  left: 5px;
-  top: -15px;
-  border-radius: 8px;
-  background: #ffd8c8;
-  box-shadow: 10px -2px 0 #ffd8c8, 20px 0 0 #ffd8c8;
-}
-.pet-stage[data-tool="feed"] .interaction-prop {
-  opacity: 1;
-  width: 46px;
-  height: 28px;
-  border-radius: 12px;
-  background: #d79035;
-  border: 3px solid #a86324;
-  animation: cookie-feed 0.9s ease-in-out infinite;
-}
-.pet-stage[data-tool="feed"] .interaction-prop:before {
-  width: 5px;
-  height: 5px;
-  left: 11px;
-  top: 8px;
-  border-radius: 50%;
-  background: #774016;
-  box-shadow: 13px 6px 0 #774016, 24px 1px 0 #774016;
-}
-.pet-stage[data-tool="ball"] .interaction-prop {
-  opacity: 1;
-  width: 42px;
-  height: 42px;
-  border-radius: 50%;
-  background: radial-gradient(circle at 32% 28%, #ff8474 0 10%, #e6322d 11% 68%, #a9181f 69%);
-  box-shadow: 0 6px 12px rgba(87, 36, 23, 0.2);
-  animation: ball-tease 1.15s ease-in-out infinite;
-}
-.pet-stage[data-tool="tickle"] .interaction-prop {
-  opacity: 1;
-  width: 64px;
-  height: 42px;
-  animation: tickle-fingers 0.7s ease-in-out infinite;
-}
-.pet-stage[data-tool="tickle"] .interaction-prop:before,
-.pet-stage[data-tool="tickle"] .interaction-prop:after {
-  width: 28px;
-  height: 28px;
-  border: 4px solid #f0b72b;
-  border-left: 0;
-  border-bottom: 0;
-  border-radius: 50%;
-}
-.pet-stage[data-tool="tickle"] .interaction-prop:before {
-  left: 8px;
-  top: 4px;
-  transform: rotate(18deg);
-}
-.pet-stage[data-tool="tickle"] .interaction-prop:after {
-  left: 28px;
-  top: 12px;
-  transform: rotate(28deg);
-}
 .pet-hotspot {
   position: absolute;
   left: 57px;
@@ -824,29 +739,6 @@ footer {
   }
   72% {
     transform: translateY(-6px) rotate(3deg) scaleX(1.02);
-  }
-}
-@keyframes hand-pat {
-  50% {
-    transform: translate(-50%, -36%) rotate(-8deg);
-  }
-}
-@keyframes cookie-feed {
-  50% {
-    transform: translate(-18%, -50%) rotate(8deg) scale(0.92);
-  }
-}
-@keyframes ball-tease {
-  25% {
-    transform: translate(32%, -70%) rotate(50deg);
-  }
-  70% {
-    transform: translate(-80%, -30%) rotate(-80deg);
-  }
-}
-@keyframes tickle-fingers {
-  50% {
-    transform: translate(-40%, -45%) rotate(9deg);
   }
 }
 @keyframes spark {

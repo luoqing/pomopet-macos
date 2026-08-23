@@ -46,7 +46,7 @@ npm run package:mac
 
 产物写入 `dist/release/`。当前配置生成 arm64 DMG 和 ZIP，但没有开发者签名或公证。若在 Linux 交叉打包，能生成的产物仍需在 Mac 上试装，且不能据此宣称透明窗口、通知和登录项已验证。
 
-本轮 Linux 交叉构建已生成 `dist/release/Pomopet-0.1.3-arm64-mac.zip`。在 Apple Silicon Mac 上解压后，将 `Pomopet.app` 拖入“应用程序”，再按下面的未签名首次打开流程试装。
+本轮 Linux 交叉构建已生成 `dist/release/Pomopet-0.1.4-arm64-mac.zip`。在 Apple Silicon Mac 上解压后，将 `Pomopet.app` 拖入“应用程序”，再按下面的未签名首次打开流程试装。
 
 ### 安装与首次打开
 

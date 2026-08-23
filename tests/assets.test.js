@@ -9,7 +9,7 @@ describe('bundled companion assets', () => {
     for (const id of ids) { const file = 'src/ui/public/audio/' + id + '.mp3'; await access(file); expect((await stat(file)).size).toBeGreaterThan(1_000); }
   });
   it('contains every illustrated pet pose and the application icon', async () => {
-    const poses = ['focus', 'reward', 'ball', 'sleepy', 'fainted', 'annoyed', 'pet', 'feed'];
+    const poses = ['focus', 'reward', 'ball', 'sleepy', 'fainted', 'annoyed', 'pet', 'feed', 'water'];
     const animations = [...poses, 'comfort', 'water'];
     const files = [
       ...poses.map((pose) => `src/ui/public/assets/pet/momo-${pose}.png`),

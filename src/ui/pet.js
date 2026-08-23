@@ -24,10 +24,6 @@ const poses = {
   offwork: 'sleepy', fainted: 'fainted', annoyed: 'annoyed', interactionPet: 'pet',
   interactionFeed: 'feed', interactionBall: 'ball', comfort: 'comfort'
 };
-const tools = {
-  interactionPet: 'pet', interactionFeed: 'feed', interactionBall: 'ball', comfort: 'tickle'
-};
-
 function createBrowserBridge() {
   const demo = { timer: { status: 'idle', phase: 'focus' }, settings: { voiceMode: 'off', volume: 0.75, interactions: true } };
   const stateListeners = [];
@@ -52,8 +48,6 @@ function setVisualState(kind) {
   const visual = poses[kind] ? kind : 'idle';
   stage.dataset.state = visual;
   petArt.src = companionAnimationSrc(poses[visual]);
-  if (tools[visual]) stage.dataset.tool = tools[visual];
-  else delete stage.dataset.tool;
 }
 
 function show(event) {
@@ -88,11 +82,6 @@ function closeActivePresentation() {
   setVisualState(baseState());
 }
 
-function trackTool(event) {
-  stage.style.setProperty('--tool-x', `${event.offsetX}px`);
-  stage.style.setProperty('--tool-y', `${event.offsetY}px`);
-}
-
 function nudgePet() {
   if (active || dragStart || !menu.classList.contains('hidden')) return;
   const focusMode = state?.timer?.status === 'running' && state.timer.phase === 'focus';
@@ -124,13 +113,11 @@ document.querySelector('#dismissReminder').onclick = () => {
   closeActivePresentation();
 };
 document.querySelector('#petHotspot').onpointerdown = (event) => {
-  trackTool(event);
   dragStart = { x: event.screenX, y: event.screenY };
   dragged = false;
   event.currentTarget.setPointerCapture(event.pointerId);
 };
 document.querySelector('#petHotspot').onpointermove = (event) => {
-  trackTool(event);
   if (!dragStart) return;
   const delta = { x: event.screenX - dragStart.x, y: event.screenY - dragStart.y };
   if (Math.abs(delta.x) + Math.abs(delta.y) > 3) dragged = true;

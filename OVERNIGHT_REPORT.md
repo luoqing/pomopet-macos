@@ -63,7 +63,7 @@ UI Tests    2 passed (2)
 - 生产 renderer：`dist/app/`（本机 `npm run build` 已生成，Git 忽略）。
 - Linux x64 可运行目录包：`dist/release/linux-unpacked/`（本机完成构建）。DevBox 没有 Xvfb，Ozone headless 启动又因宿主机全局 `inotify_init(): Too many open files` 后 SIGSEGV，故没有把真实 Electron 窗口启动列为通过。
 - Apple Silicon 交叉构建：`dist/release/mac-arm64/Pomopet.app`（约 249 MB，未签名、未在 Mac 启动）。
-- Apple Silicon ZIP：`dist/release/Pomopet-0.1.3-arm64-mac.zip`（约 101 MB，HTTP 可访问，SHA-256 `0a245014f8e65cdec4c688f89b1a54bc449e216f8815b5a0e3d4d3d2fc4de017`）。
+- Apple Silicon ZIP：`dist/release/Pomopet-0.1.4-arm64-mac.zip`（约 101 MB，HTTP 可访问，SHA-256 `c364f211efaab2cd20a3ae4e4d6d8a18181d6a2fbe1db2ca5780934db73fbe37`）。
 - release 说明：`dist/release/README.md`。
 - Apple Silicon 一键打包：`npm run package:mac`，目标为 arm64 DMG + ZIP。
 - `file` 确认包内主程序是 `Mach-O 64-bit arm64`；ASAR 清单确认八张宠物姿势、四段语音、图标和主进程入口均已入包。当前 Linux 环境已生成 arm64 `.app` 和 ZIP，但尚未生成签名/公证产物；不能把交叉构建当作 Mac 试装通过。
