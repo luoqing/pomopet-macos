@@ -1,26 +1,32 @@
+import { companionPoseSrc } from './asset-paths.js';
+
 const api = window.pomopet || createBrowserBridge();
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
 let state; let selectedPreset = '25/5';
 let previewTimer;
+let clockSkewMs = 0;
 const weekdays = ['日', '一', '二', '三', '四', '五', '六'];
 const interactionPoses = { interactionPet: 'pet', interactionFeed: 'feed', interactionBall: 'ball', comfort: 'pet' };
 
 function createBrowserBridge() {
-  const demo = { timer: { status: 'idle', phase: 'focus', remainingMs: 25 * 60_000, todayCount: 0 }, alarms: [], offwork: { enabled: true, time: '18:30', weekdays: [1, 2, 3, 4, 5], pose: 'sleepy', snoozeMinutes: 15, escalateMinutes: 15, allowAnnoyed: true }, settings: { preset: '25/5', customFocus: 25, customBreak: 5, voiceMode: 'key', volume: .75, interactions: true, launchAtLogin: false } };
+  const demo = { now: Date.now(), timer: { status: 'idle', phase: 'focus', remainingMs: 25 * 60_000, targetAt: null, todayCount: 0 }, alarms: [], offwork: { enabled: true, time: '18:30', weekdays: [1, 2, 3, 4, 5], pose: 'sleepy', snoozeMinutes: 15, escalateMinutes: 15, allowAnnoyed: true }, settings: { preset: '25/5', customFocus: 25, customBreak: 5, voiceMode: 'key', volume: .75, interactions: true, launchAtLogin: false } };
   return { getState: async () => demo, command: async (name, payload) => {
-    if (name === 'timer:start') { demo.timer.status = 'running'; demo.timer.remainingMs = payload.focusMinutes * 60_000; }
-    if (name === 'timer:pause') demo.timer.status = 'paused'; if (name === 'timer:resume') demo.timer.status = 'running';
+    demo.now = Date.now();
+    if (name === 'timer:start') { demo.timer.status = 'running'; demo.timer.remainingMs = payload.focusMinutes * 60_000; demo.timer.targetAt = demo.now + demo.timer.remainingMs; }
+    if (name === 'timer:pause') { demo.timer.remainingMs = Math.max(0, demo.timer.targetAt - demo.now); demo.timer.targetAt = null; demo.timer.status = 'paused'; }
+    if (name === 'timer:resume') { demo.timer.targetAt = demo.now + demo.timer.remainingMs; demo.timer.status = 'running'; }
     if (name === 'alarm:add') demo.alarms.push({ ...payload, id: 'browser-alarm-' + Date.now(), snoozes: [] });
     return demo;
   }, onState: () => {}, showControl: () => {} };
 }
 const format = (ms) => { const seconds = Math.ceil(ms / 1000); return String(Math.floor(seconds / 60)).padStart(2, '0') + ':' + String(seconds % 60).padStart(2, '0'); };
+const displayRemaining = (timer) => timer.status === 'running' && timer.targetAt ? Math.max(0, timer.targetAt - (Date.now() - clockSkewMs)) : timer.remainingMs;
 const dateInput = (timestamp) => { const d = new Date(timestamp); const local = new Date(d.getTime() - d.getTimezoneOffset() * 60_000); return local.toISOString().slice(0, 16); };
 const recurrence = (alarm) => alarm.type === 'once' ? new Date(alarm.at).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : alarm.weekdays.map((d) => '周' + weekdays[d]).join('、');
 
 function render(next) {
-  state = next; const timer = state.timer; $('#clock').textContent = format(timer.remainingMs);
+  state = next; clockSkewMs = Date.now() - (state.now || Date.now()); const timer = state.timer; $('#clock').textContent = format(displayRemaining(timer));
   $('#todayCount').textContent = timer.todayCount; $('#task').value = timer.task || $('#task').value;
   $('#phase').textContent = timer.status === 'idle' || timer.status === 'stopped' ? '准备专注' : timer.phase === 'break' ? '休息一下' : timer.status === 'paused' ? '暂停中' : '末末陪你专注中';
   $('#mainAction').textContent = timer.status === 'paused' ? '继续' : timer.status === 'running' ? '暂停' : '开始专注';
@@ -59,15 +65,23 @@ function openAlarmForm(alarm = null) {
   $('#saveAlarm').onclick = async () => { const type = $('#alarmType').value; const payload = { label: $('#alarmLabel').value, type, enabled: true, at: type === 'once' ? new Date($('#alarmWhen').value).getTime() : null, time: type === 'weekly' ? $('#alarmWhen').value : null, weekdays: type === 'weekly' ? $$('#alarmDays .on').map((b) => Number(b.dataset.day)) : [] }; await command(alarm?.id ? 'alarm:update' : 'alarm:add', alarm?.id ? { id: alarm.id, patch: payload } : payload); form.classList.add('hidden'); };
 }
 function escapeHtml(value) { const span = document.createElement('span'); span.textContent = value; return span.innerHTML; }
-async function command(name, payload) { render(await api.command(name, payload)); }
+async function command(name, payload) {
+  try {
+    render(await api.command(name, payload));
+  } catch (error) {
+    const message = error?.message || 'unknown_error';
+    $('#timerHint').textContent = '末末刚才没接住这个指令：' + message;
+    throw error;
+  }
+}
 
 $('#mainAction').onclick = async () => { const t = state.timer; if (t.status === 'running') return command('timer:pause'); if (t.status === 'paused') return command('timer:resume'); const preset = selectedPreset === '50/10' ? [50, 10] : selectedPreset === 'custom' ? [Number($('#focusMinutes').value), Number($('#breakMinutes').value)] : [25, 5]; if (selectedPreset === 'custom') await api.command('settings:update', { customFocus: preset[0], customBreak: preset[1] }); return command('timer:start', { task: $('#task').value, focusMinutes: preset[0], breakMinutes: preset[1] }); };
 $('#complete').onclick = () => command('timer:complete'); $('#stop').onclick = () => command(state.timer.phase === 'break' ? 'timer:skipBreak' : 'timer:stop');
 $$('#presets button').forEach((b) => b.onclick = async () => { selectedPreset = b.dataset.preset; await command('settings:update', { preset: selectedPreset }); });
 $$('[data-interaction]').forEach((b) => b.onclick = () => {
   const kind = b.dataset.interaction; clearTimeout(previewTimer);
-  $('#momoPreview').src = '/assets/pet/momo-' + interactionPoses[kind] + '.png';
-  previewTimer = setTimeout(() => { $('#momoPreview').src = '/assets/pet/momo-focus.png'; }, 12_000);
+  $('#momoPreview').src = companionPoseSrc(interactionPoses[kind]);
+  previewTimer = setTimeout(() => { $('#momoPreview').src = companionPoseSrc('focus'); }, 12_000);
   return command('interaction', { kind });
 }); $('#showPet').onclick = () => command('pet:visible', { visible: true });
 $$('.tabs button').forEach((b) => b.onclick = () => { $$('.tabs button').forEach((x) => x.classList.remove('active')); $$('.drawer').forEach((x) => x.classList.remove('active')); b.classList.add('active'); $('#' + b.dataset.tab + 'Panel').classList.add('active'); });
@@ -76,3 +90,7 @@ $('#saveOffwork').onclick = () => command('offwork:update', { enabled: $('#offwo
 $('#saveSettings').onclick = () => command('settings:update', { voiceMode: $('#voiceMode').value, volume: Number($('#volume').value), interactions: $('#interactions').checked, launchAtLogin: $('#launchAtLogin').checked });
 async function initialize() { api.onState(render); render(await api.getState()); }
 initialize();
+setInterval(() => {
+  if (!state?.timer) return;
+  $('#clock').textContent = format(displayRemaining(state.timer));
+}, 250);

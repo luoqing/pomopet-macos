@@ -465,6 +465,7 @@ footer {
   transform-origin: 50% 90%;
   animation: pet-idle 3.8s ease-in-out infinite;
   pointer-events: none;
+  will-change: transform, filter;
 }
 .pet-hotspot {
   position: absolute;
@@ -589,6 +590,13 @@ footer {
   display: block;
   animation: spark 1s ease-out infinite;
 }
+.pet-stage[data-state="interactionPet"] .sparkles i,
+.pet-stage[data-state="interactionFeed"] .sparkles i,
+.pet-stage[data-state="interactionBall"] .sparkles i,
+.pet-stage[data-state="comfort"] .sparkles i {
+  display: block;
+  animation: spark 1.15s ease-out infinite;
+}
 .sparkles i:nth-child(1) {
   left: 50px;
   bottom: 110px;
@@ -628,19 +636,34 @@ footer {
 .pet-stage[data-state="comfort"] .pet-art {
   animation: pet-hug 2s ease-in-out 5;
 }
+.pet-stage[data-motion="wander"] .pet-art {
+  animation: pet-walk 0.9s ease-in-out;
+}
 @keyframes breathe {
   50% {
     transform: translateX(-50%) translateY(-5px) scale(1.012);
   }
 }
 @keyframes pet-idle {
+  20% {
+    transform: translateY(-3px) rotate(-0.5deg) scaleX(1.01);
+  }
   50% {
-    transform: translateY(-4px) rotate(0.7deg);
+    transform: translateY(-7px) rotate(1.2deg) scaleY(1.015);
+  }
+  78% {
+    transform: translateY(-2px) rotate(-0.8deg);
   }
 }
 @keyframes pet-focus {
+  18% {
+    transform: translateY(2px) rotate(-0.5deg) scaleY(0.985);
+  }
   50% {
-    transform: translateY(3px) scaleY(0.98);
+    transform: translateY(6px) rotate(0.5deg) scaleY(0.965);
+  }
+  82% {
+    transform: translateY(1px) rotate(-0.4deg);
   }
 }
 @keyframes pet-hop {
@@ -672,27 +695,50 @@ footer {
   }
 }
 @keyframes pet-nuzzle {
+  20% {
+    transform: translateY(-5px) translateX(-5px) rotate(-6deg) scale(1.035);
+  }
   50% {
-    transform: translateY(-8px) rotate(-4deg) scale(1.04);
+    transform: translateY(-11px) translateX(6px) rotate(5deg) scale(1.06);
+  }
+  82% {
+    transform: translateY(-4px) rotate(-3deg) scale(1.025);
   }
 }
 @keyframes pet-nom {
+  20% {
+    transform: scaleX(1.03) scaleY(0.92) translateY(8px);
+  }
   50% {
-    transform: scaleY(0.94) translateY(5px);
+    transform: scaleX(0.98) scaleY(1.03) translateY(-3px);
+  }
+  75% {
+    transform: scaleX(1.02) scaleY(0.95) translateY(5px);
   }
 }
 @keyframes pet-chase {
   25% {
-    transform: translateX(25px) rotate(4deg);
+    transform: translateX(34px) translateY(-8px) rotate(7deg);
   }
   65% {
-    transform: translateX(-30px) rotate(-5deg);
+    transform: translateX(-38px) translateY(2px) rotate(-8deg);
   }
 }
 @keyframes pet-hug {
   50% {
     transform: scale(1.06) translateY(-3px);
     filter: drop-shadow(0 0 15px rgba(239, 157, 145, 0.65));
+  }
+}
+@keyframes pet-walk {
+  20% {
+    transform: translateY(-8px) rotate(-3deg) scaleX(1.03);
+  }
+  45% {
+    transform: translateY(0) rotate(2deg) scaleX(0.98);
+  }
+  72% {
+    transform: translateY(-6px) rotate(3deg) scaleX(1.02);
   }
 }
 @keyframes spark {

@@ -5,6 +5,7 @@ test('control surface renders and completes browser fallback timer flow', async 
   await page.goto('/'); await expect(page.getByRole('heading', { name: '认真工作，也要好好生活。' })).toBeVisible();
   await page.getByPlaceholder('这颗番茄，想完成什么？').fill('验证 Pomopet 核心流程');
   await page.getByRole('button', { name: '开始专注' }).click(); await expect(page.getByRole('button', { name: '暂停' })).toBeVisible();
+  await expect(page.locator('#clock')).toHaveText(/^24:5[89]$/);
   await page.getByRole('button', { name: '暂停' }).click(); await expect(page.getByRole('button', { name: '继续' })).toBeVisible();
   await page.getByRole('button', { name: '喂一口' }).click();
   await expect(page.locator('#momoPreview')).toHaveAttribute('src', /momo-feed\.png$/);

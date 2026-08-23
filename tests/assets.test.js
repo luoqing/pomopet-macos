@@ -1,4 +1,4 @@
-import { access, stat } from 'node:fs/promises';
+import { access, readFile, stat } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
 import { COPY } from '../src/core/copy.js';
 
@@ -12,5 +12,11 @@ describe('bundled companion assets', () => {
     const poses = ['focus', 'reward', 'ball', 'sleepy', 'fainted', 'annoyed', 'pet', 'feed'];
     const files = [...poses.map((pose) => `src/ui/public/assets/pet/momo-${pose}.png`), 'build/icon.png'];
     for (const file of files) { await access(file); expect((await stat(file)).size).toBeGreaterThan(10_000); }
+  });
+  it('uses a CommonJS preload so the packaged desktop controls reach Electron IPC', async () => {
+    const main = await readFile('src/platform/electron/main.mjs', 'utf8');
+    const preload = await readFile('src/platform/electron/preload.cjs', 'utf8');
+    expect(main).toContain("preload.cjs");
+    expect(preload).toContain("contextBridge.exposeInMainWorld('pomopet'");
   });
 });

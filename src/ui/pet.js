@@ -1,4 +1,5 @@
 import { BrowserVoicePlayer } from './voice-player.js';
+import { companionPoseSrc } from './asset-paths.js';
 
 const api = window.pomopet || createBrowserBridge();
 const voicePlayer = new BrowserVoicePlayer();
@@ -11,6 +12,7 @@ let active;
 let dragStart;
 let dragged = false;
 let visualTimer;
+let motionTimer;
 
 const labels = {
   focus: '陪你专注', reward: '番茄摘到啦', break: '该休息啦', alarm: '闹钟到点',
@@ -46,7 +48,7 @@ function baseState() {
 function setVisualState(kind) {
   const visual = poses[kind] ? kind : 'idle';
   stage.dataset.state = visual;
-  petArt.src = `/assets/pet/momo-${poses[visual]}.png`;
+  petArt.src = companionPoseSrc(poses[visual]);
 }
 
 function show(event) {
@@ -78,6 +80,18 @@ function closeActivePresentation() {
   active = null;
   speech.classList.add('hidden');
   setVisualState(baseState());
+}
+
+function nudgePet() {
+  if (active || dragStart || !menu.classList.contains('hidden')) return;
+  const focusMode = state?.timer?.status === 'running' && state.timer.phase === 'focus';
+  const step = focusMode ? 8 : 18;
+  const delta = { x: Math.round((Math.random() - 0.5) * step), y: Math.round((Math.random() - 0.65) * step) };
+  if (Math.abs(delta.x) + Math.abs(delta.y) < 4) return;
+  stage.dataset.motion = 'wander';
+  api.dragPet(delta);
+  clearTimeout(motionTimer);
+  motionTimer = setTimeout(() => { delete stage.dataset.motion; }, 900);
 }
 
 api.onState((next) => { state = next; if (!active) setVisualState(baseState()); });
@@ -118,6 +132,7 @@ document.querySelector('#petHotspot').onpointerup = () => {
 async function initialize() {
   state = await api.getState();
   setVisualState(baseState());
+  setInterval(nudgePet, 4_500);
 }
 
 initialize();

@@ -1,5 +1,7 @@
+import { voiceAssetBase } from './asset-paths.js';
+
 export class BrowserVoicePlayer {
-  constructor({ createAudio = (url) => new Audio(url), assetBase = '/audio/' } = {}) {
+  constructor({ createAudio = (url) => new Audio(url), assetBase = voiceAssetBase() } = {}) {
     this.createAudio = createAudio; this.assetBase = assetBase; this.current = null; this.pending = [];
   }
   enqueue({ id, priority, volume = 1 }) {

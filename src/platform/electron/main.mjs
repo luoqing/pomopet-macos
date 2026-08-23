@@ -30,7 +30,7 @@ function createWindows() {
   controlWindow = new BrowserWindow({
     width: 1040, height: 740, minWidth: 860, minHeight: 640, show: false,
     titleBarStyle: 'hiddenInset', backgroundColor: '#f3eadb',
-    webPreferences: { preload: join(here, 'preload.mjs'), contextIsolation: true, nodeIntegration: false }
+    webPreferences: { preload: join(here, 'preload.cjs'), contextIsolation: true, nodeIntegration: false }
   });
   controlWindow.loadFile(appPage('index.html'));
   controlWindow.once('ready-to-show', () => controlWindow.show());
@@ -42,8 +42,8 @@ function createWindows() {
   petWindow = new BrowserWindow({
     ...initial, width: 300, height: 280, transparent: true, frame: false, resizable: false,
     hasShadow: false, alwaysOnTop: true, skipTaskbar: true, focusable: false,
-    show: runtime.data.pet.visible, type: process.platform === 'darwin' ? 'panel' : undefined,
-    webPreferences: { preload: join(here, 'preload.mjs'), contextIsolation: true, nodeIntegration: false }
+    show: true, type: process.platform === 'darwin' ? 'panel' : undefined,
+    webPreferences: { preload: join(here, 'preload.cjs'), contextIsolation: true, nodeIntegration: false }
   });
   petWindow.setAlwaysOnTop(true, 'floating');
   petWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: false });
@@ -78,7 +78,7 @@ app.whenReady().then(async () => {
     },
     onNotify: () => {}
   });
-  await runtime.init(); createWindows(); createTray();
+  await runtime.init(); await runtime.command('pet:visible', { visible: true }); createWindows(); createTray();
   setInterval(() => runtime.tick().catch(console.error), 500);
   app.on('activate', () => { controlWindow.show(); controlWindow.focus(); });
 });

@@ -1,6 +1,6 @@
 {
   "name": "pomopet",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "description": "一只陪你工作的桌面小狗",
   "author": "Pomopet",
   "type": "module",
@@ -34,7 +34,9 @@
     "appId": "cn.pomopet.desktop",
     "productName": "Pomopet",
     "asar": true,
-    "directories": { "output": "dist/release" },
+    "directories": {
+      "output": "dist/release"
+    },
     "files": [
       "dist/app/**/*",
       "src/platform/electron/**/*",
@@ -44,7 +46,20 @@
     "mac": {
       "category": "public.app-category.productivity",
       "icon": "build/icon.png",
-      "target": [{ "target": "dmg", "arch": ["arm64"] }, { "target": "zip", "arch": ["arm64"] }],
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ],
       "hardenedRuntime": true,
       "gatekeeperAssess": false,
       "identity": null,
@@ -52,6 +67,12 @@
         "NSUserNotificationUsageDescription": "Pomopet 需要通知权限，以便在窗口隐藏时提醒闹钟和休息。"
       }
     },
-    "linux": { "target": ["dir"], "category": "Utility", "icon": "build/icon.png" }
+    "linux": {
+      "target": [
+        "dir"
+      ],
+      "category": "Utility",
+      "icon": "build/icon.png"
+    }
   }
 }
