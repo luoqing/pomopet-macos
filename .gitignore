@@ -1,4 +1,5 @@
 node_modules/
+.worktrees/
 dist/app/
 dist/release/*
 !dist/release/README.md
@@ -11,4 +12,3 @@ artifacts/screenshots/*.png
 coverage/
 src/ui/assets/pomopet-sprite*.png
 src/ui/public/assets/pomopet-sprite*.png
-
