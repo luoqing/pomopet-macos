@@ -43,6 +43,57 @@ test('control surface renders and completes browser fallback timer flow', async 
   expect(errors).toEqual([]); await page.screenshot({ path: 'artifacts/screenshots/control-window.png', fullPage: true });
 });
 
+test('custom timer edits survive state ticks and save without an apply button', async ({ page }) => {
+  await page.addInitScript(() => {
+    const state = {
+      now: Date.now(),
+      timer: { status: 'idle', phase: 'focus', task: '', remainingMs: 15 * 60_000, focusMs: 15 * 60_000, breakMs: 5 * 60_000, targetAt: null, todayCount: 0 },
+      todos: { items: [], activeId: null }, alarms: [], review: { days: [] },
+      offwork: { enabled: false, time: '18:30', weekdays: [] },
+      persona: { preset: 'gentle', petName: '末末', ownerName: '主人', customPrompt: '', teaseLevel: 35, chatFrequency: 'occasional' },
+      settings: { preset: 'custom', customFocus: 15, customBreak: 5, voiceMode: 'off' }
+    };
+    const listeners = []; const commands = []; const copy = (value) => JSON.parse(JSON.stringify(value));
+    globalThis.__customTimerCommands = commands;
+    globalThis.__emitPomopetState = () => listeners.forEach((callback) => callback(copy(state)));
+    globalThis.pomopet = {
+      getState: async () => copy(state),
+      command: async (name, payload) => {
+        commands.push({ name, payload });
+        if (name === 'settings:update') state.settings = { ...state.settings, ...payload };
+        if (name === 'timer:start') state.timer = { ...state.timer, status: 'running', focusMs: payload.focusMinutes * 60_000, breakMs: payload.breakMinutes * 60_000, remainingMs: payload.focusMinutes * 60_000, targetAt: state.now + payload.focusMinutes * 60_000 };
+        globalThis.__emitPomopetState();
+        return copy(state);
+      },
+      onState: (callback) => { listeners.push(callback); return () => {}; },
+      setDirty: () => {}, onDiscardDrafts: () => () => {}, showControl: () => {}
+    };
+  });
+
+  await page.goto('/');
+  await page.locator('#focusMinutes').fill('35');
+  await page.evaluate(() => globalThis.__emitPomopetState());
+  await expect(page.locator('#focusMinutes')).toHaveValue('35');
+  await page.locator('#breakMinutes').fill('8');
+  await page.evaluate(() => globalThis.__emitPomopetState());
+  await expect(page.locator('#focusMinutes')).toHaveValue('35');
+  await expect(page.locator('#breakMinutes')).toHaveValue('8');
+  await page.locator('#phase').click();
+  await expect.poll(() => page.evaluate(() => globalThis.__customTimerCommands.filter((item) => item.name === 'settings:update').at(-1))).toEqual({
+    name: 'settings:update', payload: { preset: 'custom', customFocus: 35, customBreak: 8 }
+  });
+  await expect(page.getByRole('button', { name: '应用自定义时间' })).toHaveCount(0);
+  await expect(page.locator('#clock')).toHaveText('35:00');
+  await page.evaluate(() => globalThis.__emitPomopetState());
+  await expect(page.locator('#focusMinutes')).toHaveValue('35');
+  await expect(page.locator('#breakMinutes')).toHaveValue('8');
+  await page.getByRole('button', { name: '开始专注', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => globalThis.__customTimerCommands.filter((item) => item.name === 'timer:start').at(-1))).toEqual({
+    name: 'timer:start', payload: { task: '', todoId: null, focusMinutes: 35, breakMinutes: 8 }
+  });
+  await expect(page.locator('#clock')).toHaveText(/^34:5[89]$/);
+});
+
 test('settings forms keep local edits while Electron state ticks arrive', async ({ page }) => {
   await page.addInitScript(() => {
     const state = {

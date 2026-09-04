@@ -36,6 +36,9 @@ let clockSkewMs = 0;
 let voices = [];
 let lastDirtyReport = null;
 let aiTesting = false;
+let customDurationDraft = null;
+let customDurationSaveChain = Promise.resolve();
+let lastQueuedCustomDuration = null;
 
 function createBrowserBridge() {
   const demo = {
@@ -208,8 +211,9 @@ function render(next) {
   selectedPreset = state.settings.preset || selectedPreset;
   $$('#presets button').forEach((button) => button.classList.toggle('selected', button.dataset.preset === selectedPreset));
   $('#customTime').classList.toggle('hidden', selectedPreset !== 'custom');
-  if (document.activeElement !== $('#focusMinutes')) $('#focusMinutes').value = state.settings.customFocus || 25;
-  if (document.activeElement !== $('#breakMinutes')) $('#breakMinutes').value = state.settings.customBreak || 5;
+  const customValues = customDurationDraft || { focus: state.settings.customFocus || 25, rest: state.settings.customBreak || 5 };
+  $('#focusMinutes').value = customValues.focus;
+  $('#breakMinutes').value = customValues.rest;
   renderBreakContinuation();
   renderTodoAdd();
   renderTodos();
@@ -224,7 +228,9 @@ function render(next) {
 function renderTimerClock() {
   if (!state?.timer) return;
   const timer = state.timer;
-  const remainingMs = displayRemaining(timer);
+  const preset = state.settings?.preset;
+  const configuredFocus = preset === '50/10' ? 50 : preset === 'custom' ? Number(state.settings.customFocus) || 25 : 25;
+  const remainingMs = ['idle', 'stopped'].includes(timer.status) ? configuredFocus * 60_000 : displayRemaining(timer);
   $('#clock').textContent = format(remainingMs);
   const totalMs = Number(timer.phase === 'break' ? timer.breakMs : timer.focusMs) || remainingMs;
   const progress = ['running', 'paused'].includes(timer.status) && totalMs > 0
@@ -377,8 +383,8 @@ function bindTodoRow(row) {
     row.onclick = (event) => { if (!sessions.todo?.saving && !sessions.todoAdd?.saving && !event.target.matches('input, select, button')) command('todo:active', { id }); };
     row.querySelector('.todo-done').onchange = (event) => command('todo:toggle', { id, done: event.currentTarget.checked });
     row.querySelector('.todo-start')?.addEventListener('click', async () => {
+      if (selectedPreset === 'custom' && !await saveCustomDurations()) return;
       const [focusMinutes, breakMinutes] = selectedDurations();
-      if (selectedPreset === 'custom') await api.command('settings:update', { customFocus: focusMinutes, customBreak: breakMinutes });
       await command('todo:start', { id, focusMinutes, breakMinutes });
     });
     row.querySelector('.todo-edit')?.addEventListener('click', () => {
@@ -597,7 +603,48 @@ function isTypingControl(element) { const nonTyping = ['button', 'checkbox', 'co
 
 $('#alarmPose').innerHTML = PET_POSES.map(({ value, label }) => `<option value="${value}">${label}</option>`).join('');
 const selectedDurations = () => selectedPreset === '50/10' ? [50, 10] : selectedPreset === 'custom' ? [Number($('#focusMinutes').value), Number($('#breakMinutes').value)] : [25, 5];
-$('#mainAction').onclick = async () => { const timer = state.timer; if (timer.status === 'running') return command('timer:pause'); if (timer.status === 'paused') return command('timer:resume'); const preset = selectedDurations(); if (selectedPreset === 'custom') await api.command('settings:update', { customFocus: preset[0], customBreak: preset[1] }); const todo = activeTodo(); return command('timer:start', { task: $('#task').value || todo?.title || '', todoId: todo?.id || null, focusMinutes: preset[0], breakMinutes: preset[1] }); };
+const readCustomDurations = () => {
+  const focus = Number($('#focusMinutes').value); const rest = Number($('#breakMinutes').value);
+  const focusValid = Number.isInteger(focus) && focus >= 1 && focus <= 180;
+  const restValid = Number.isInteger(rest) && rest >= 1 && rest <= 60;
+  $('#focusMinutes').setAttribute('aria-invalid', String(!focusValid));
+  $('#breakMinutes').setAttribute('aria-invalid', String(!restValid));
+  if (!focusValid || !restValid) {
+    $('#timerHint').textContent = '专注时间请输入 1–180 分钟，休息时间请输入 1–60 分钟。';
+    return null;
+  }
+  return [focus, rest];
+};
+const rememberCustomDurationDraft = () => {
+  customDurationDraft = { focus: $('#focusMinutes').value, rest: $('#breakMinutes').value };
+};
+const saveCustomDurations = () => {
+  const durations = readCustomDurations();
+  if (!durations) return Promise.resolve(null);
+  const [customFocus, customBreak] = durations;
+  const signature = `${customFocus}/${customBreak}`;
+  if (signature === lastQueuedCustomDuration) return customDurationSaveChain;
+  lastQueuedCustomDuration = signature;
+  customDurationSaveChain = customDurationSaveChain.catch(() => null).then(async () => {
+    try {
+      const next = await sendCommand('settings:update', { preset: 'custom', customFocus, customBreak });
+      if (`${customDurationDraft?.focus}/${customDurationDraft?.rest}` === signature) customDurationDraft = null;
+      render(next);
+      return next;
+    } catch {
+      if (lastQueuedCustomDuration === signature) lastQueuedCustomDuration = null;
+      $('#timerHint').textContent = '自定义时间保存失败，请再试一次。';
+      return null;
+    }
+  });
+  return customDurationSaveChain;
+};
+$('#mainAction').onclick = async () => { const timer = state.timer; if (timer.status === 'running') return command('timer:pause'); if (timer.status === 'paused') return command('timer:resume'); if (selectedPreset === 'custom' && !await saveCustomDurations()) return; const preset = selectedDurations(); const todo = activeTodo(); return command('timer:start', { task: $('#task').value || todo?.title || '', todoId: todo?.id || null, focusMinutes: preset[0], breakMinutes: preset[1] }); };
+[$('#focusMinutes'), $('#breakMinutes')].forEach((input) => {
+  input.oninput = rememberCustomDurationDraft;
+  input.onchange = () => { void saveCustomDurations(); };
+  input.onkeydown = (event) => { if (event.key === 'Enter') { event.preventDefault(); input.blur(); } };
+});
 $('#task').onblur = async () => { const task = $('#task').value; if (task.trim() !== (state.timer.task || '').trim()) await sendCommand('timer:updateTask', { task }); };
 $('#task').onkeydown = (event) => { if (event.key === 'Enter') { event.preventDefault(); $('#task').blur(); } };
 $('#todoTitle').oninput = (event) => editSession('todoAdd', { title: event.target.value });
@@ -619,7 +666,7 @@ $('#addTodo').onclick = async () => {
 };
 $('#todoTitle').onkeydown = (event) => { if (event.key === 'Enter') { event.preventDefault(); $('#addTodo').click(); } };
 $('#complete').onclick = () => command(state.timer.phase === 'break' ? 'timer:endBreak' : 'timer:complete'); $('#stop').onclick = () => command('timer:stop');
-$$('#presets button').forEach((button) => button.onclick = () => { selectedPreset = button.dataset.preset; command('settings:update', { preset: selectedPreset }); });
+$$('#presets button').forEach((button) => button.onclick = () => { selectedPreset = button.dataset.preset; if (selectedPreset !== 'custom') customDurationDraft = null; command('settings:update', { preset: selectedPreset }); });
 $('#showPet').onclick = () => command('pet:visible', { visible: true });
 $('#breakContinuationPrimary').onclick = () => { const continuation = state.breakContinuation; if (continuation.canContinue) return command('break:continue'); if (continuation.recommendedTodoId) return command('break:switch', { todoId: continuation.recommendedTodoId }); api.showControl({ focus: 'todo-entry' }); $('#todoTitle').focus(); };
 $('#breakContinuationChoose').onclick = () => { breakChooserOpen = !breakChooserOpen; renderBreakContinuation(); globalThis.requestAnimationFrame(() => (breakChooserOpen ? $('#breakChooser button') : $('#breakContinuationChoose'))?.focus()); };
