@@ -69,12 +69,18 @@ describe('time review projector', () => {
       { id: 'b', cycleId: 'b', kind: 'focus', todoId: null, taskTitle: '', segments: [segment(at('2026-09-04', '10:20'), at('2026-09-04', '10:30'))], status: 'stopped', completionReason: 'stopped' }
     ], reminderOccurrences: [
       { occurrenceId: '1', alarmId: 'a', reminderText: '起来喝水', firedAt: at('2026-09-04', '10:31'), response: null },
-      { occurrenceId: '2', alarmId: 'b', reminderText: '起来喝水', firedAt: at('2026-09-04', '10:45'), response: { type: 'dismissed' } }
+      { occurrenceId: '2', alarmId: 'b', reminderText: '起来喝水', firedAt: at('2026-09-04', '10:45'), response: { type: 'dismissed' } },
+      { occurrenceId: '3', alarmId: 'c', reminderText: '活动一下', firedAt: at('2026-09-04', '10:50'), response: null }
     ], workdayEvents: [{ id: 's', type: 'offwork_snoozed', occurredAt: at('2026-09-04', '10:40') }] };
     const result = reviewDay(day, { now: at('2026-09-04', '11:00') });
     expect(result.tasks).toEqual(expect.arrayContaining([{ key: '1', title: '原始标题', ms: 20 * 60_000 }, { key: 'unassigned', title: '未关联任务', ms: 10 * 60_000 }]));
     expect(result.reminders[0]).toMatchObject({ text: '起来喝水', count: 2 });
-    expect(result.reminderBuckets).toMatchObject({ '10:30': 2 });
+    expect(result.reminderBuckets).toMatchObject({ '10:30': 3 });
+    expect(result.reminderTimeline).toEqual([
+      { occurrenceId: '1', text: '起来喝水', firedAt: at('2026-09-04', '10:31') },
+      { occurrenceId: '2', text: '起来喝水', firedAt: at('2026-09-04', '10:45') },
+      { occurrenceId: '3', text: '活动一下', firedAt: at('2026-09-04', '10:50') }
+    ]);
     expect(result.extensionCount).toBe(1);
   });
 });

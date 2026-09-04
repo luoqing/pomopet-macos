@@ -928,26 +928,58 @@ test('main timer exposes elapsed progress and routes early break completion expl
   expect(await page.evaluate(() => globalThis.__timerCommands.at(-1))).toEqual({ name: 'timer:endBreak', payload: undefined });
 });
 
-test('time review keeps the existing house style and renders the latest seven-day summary', async ({ page }) => {
+test('time review uses seven-day navigation and renders the selected day timeline and task distribution', async ({ page }) => {
   await page.addInitScript(() => {
-    const now = Date.now();
+    const nowDate = new Date(); nowDate.setHours(20, 47, 0, 0); const now = nowDate.getTime();
     const days = Array.from({ length: 7 }, (_, index) => ({
       date: new Date(now - index * 86_400_000).toISOString().slice(0, 10),
-      rangeStartAt: now - index * 86_400_000 - 8 * 3_600_000, rangeEndAt: now - index * 86_400_000,
-      totals: { focusMs: (index + 1) * 30 * 60_000, breakMs: 10 * 60_000, excludedMs: 2 * 3_600_000, unrecordedMs: 20 * 60_000, pausedMs: 0, unplacedMs: 0 },
-      tasks: [{ key: 'one', title: '产品方案', ms: 30 * 60_000 }], reminders: [{ text: '起来喝水', count: 3 }], reminderBuckets: { '10:30': 1 },
+      rangeStartAt: now - index * 86_400_000 - 10 * 3_600_000, rangeEndAt: now - index * 86_400_000,
+      totals: { focusMs: index === 0 ? 5 * 3_600_000 + 20 * 60_000 : (index + 1) * 30 * 60_000, breakMs: 65 * 60_000, excludedMs: 3 * 3_600_000, unrecordedMs: 42 * 60_000, pausedMs: 0, unplacedMs: 0 },
+      tasks: index === 0
+        ? [{ key: 'product', title: '产品设计', ms: 148 * 60_000 }, { key: 'code', title: '代码实现', ms: 105 * 60_000 }]
+        : [{ key: `history-${index}`, title: `历史任务 ${index}`, ms: 30 * 60_000 }],
+      reminders: [{ text: '起来喝水', count: 3 }, { text: '活动一下', count: 2 }], reminderBuckets: { '10:30': 1, '15:00': 1 },
       counts: { natural: 1, early: 0, stopped: 0 }, restTimeWorkMs: 0, extensionCount: index === 0 ? 1 : 0, actualOffworkAt: index === 0 ? now : null
     }));
+    days[0].timeline = [
+      { startedAt: days[0].rangeStartAt, endedAt: days[0].rangeStartAt + 2 * 3_600_000, kind: 'focus', todoId: 'product', taskTitle: '产品设计' },
+      { startedAt: days[0].rangeStartAt + 2 * 3_600_000, endedAt: days[0].rangeStartAt + 4 * 3_600_000, kind: 'excluded', todoId: null, taskTitle: '' },
+      { startedAt: days[0].rangeStartAt + 4 * 3_600_000, endedAt: days[0].rangeStartAt + 5.75 * 3_600_000, kind: 'focus', todoId: 'code', taskTitle: '代码实现' },
+      { startedAt: days[0].rangeStartAt + 5.75 * 3_600_000, endedAt: days[0].rangeStartAt + 6.25 * 3_600_000, kind: 'break', todoId: null, taskTitle: '' }
+    ];
+    days[0].reminderTimeline = [
+      { occurrenceId: 'water', text: '起来喝水', firedAt: new Date(`${days[0].date}T10:30:00`).getTime() },
+      { occurrenceId: 'move', text: '活动一下', firedAt: new Date(`${days[0].date}T15:00:00`).getTime() }
+    ];
+    for (let index = 1; index < days.length; index += 1) days[index].timeline = [];
     const state = { now, timer: { status: 'idle', phase: 'focus', remainingMs: 25 * 60_000, todayCount: 0 }, todos: { items: [], activeId: null }, alarms: [], review: { days },
       offwork: { enabled: true, time: '18:30', weekdays: [1, 2, 3, 4, 5], pose: 'sleepy', blockMode: false, snoozeMinutes: 15, escalateMinutes: 15 },
       settings: { preset: '25/5', customFocus: 25, customBreak: 5, voiceMode: 'off' } };
-    globalThis.pomopet = { getState: async () => state, onState: () => () => {}, command: async () => state, showControl: () => {}, setDirty: () => {}, onDiscardDrafts: () => () => {} };
+    const listeners = [];
+    globalThis.__emitReviewState = () => listeners.forEach((callback) => callback(structuredClone(state)));
+    globalThis.pomopet = { getState: async () => structuredClone(state), onState: (callback) => { listeners.push(callback); return () => {}; }, command: async () => structuredClone(state), showControl: () => {}, setDirty: () => {}, onDiscardDrafts: () => () => {} };
   });
   await page.goto('/'); await page.getByRole('tab', { name: '时间回顾' }).click();
-  await expect(page.locator('.review-day')).toHaveCount(7);
-  await expect(page.locator('#reviewPanel')).toContainText('产品方案');
+  await expect(page.locator('#reviewDateList button')).toHaveCount(7);
+  await expect(page.locator('#reviewSelectedDate')).toContainText('时间花在哪里');
+  await expect(page.locator('#reviewTimeline .review-timeline-segment')).toHaveCount(4);
+  expect(await page.locator('#reviewTimeline .review-reminder-marker').allTextContents()).toEqual(['水', '动']);
+  await expect(page.locator('#reviewTasks .review-task-row')).toHaveCount(2);
+  await expect(page.locator('#reviewTasks')).toContainText('产品设计');
+  await expect(page.locator('#reviewTasks')).toContainText('代码实现');
+  await expect(page.locator('#reviewInsights p')).toHaveCount(2);
   await expect(page.locator('#reviewPanel')).toContainText('起来喝水');
-  await page.screenshot({ path: 'artifacts/screenshots/time-review.png', fullPage: true });
+  await page.locator('#reviewDateList button').nth(1).click();
+  await expect(page.locator('#reviewTasks')).toContainText('历史任务 1');
+  await expect(page.locator('#reviewTasks')).not.toContainText('产品设计');
+  await page.evaluate(() => globalThis.__emitReviewState());
+  await expect(page.locator('#reviewDateList button').nth(1)).toHaveAttribute('aria-current', 'date');
+  await page.locator('#reviewDateList button').first().click();
+  await page.screenshot({ path: 'artifacts/screenshots/time-review-desktop.png', fullPage: true });
+  await page.setViewportSize({ width: 680, height: 900 });
+  await expect(page.locator('#reviewDateList')).toBeHidden();
+  await expect(page.locator('#reviewDateSelect')).toBeVisible();
+  await page.screenshot({ path: 'artifacts/screenshots/time-review-narrow.png', fullPage: true });
 });
 
 test('off-work pet action names the configured snooze duration', async ({ page }) => {

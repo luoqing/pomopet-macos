@@ -137,6 +137,7 @@ export function reviewDay(sourceDay, { now = Date.now(), currentTimer = null } =
 
   const remindersByText = new Map();
   const reminderBuckets = {};
+  const reminderTimeline = [];
   for (const occurrence of day.reminderOccurrences ?? []) {
     const text = occurrence.reminderText || '未命名提醒';
     const item = remindersByText.get(text) ?? { text, count: 0, dismissed: 0, snoozed: 0 };
@@ -147,6 +148,7 @@ export function reviewDay(sourceDay, { now = Date.now(), currentTimer = null } =
     const fired = new Date(occurrence.firedAt);
     const bucket = `${String(fired.getHours()).padStart(2, '0')}:${fired.getMinutes() < 30 ? '00' : '30'}`;
     reminderBuckets[bucket] = (reminderBuckets[bucket] ?? 0) + 1;
+    reminderTimeline.push({ occurrenceId: occurrence.occurrenceId, text, firedAt: Number(occurrence.firedAt) });
   }
 
   const terminalFocus = intervals.filter((interval) =>
@@ -179,6 +181,7 @@ export function reviewDay(sourceDay, { now = Date.now(), currentTimer = null } =
     tasks: aggregateTasks(timeline, intervals),
     reminders: [...remindersByText.values()].sort((left, right) => right.count - left.count),
     reminderBuckets,
+    reminderTimeline: reminderTimeline.sort((left, right) => left.firedAt - right.firedAt),
     timeline
   };
 }

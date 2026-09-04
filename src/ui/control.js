@@ -39,6 +39,7 @@ let aiTesting = false;
 let customDurationDraft = null;
 let customDurationSaveChain = Promise.resolve();
 let lastQueuedCustomDuration = null;
+let selectedReviewDate = null;
 
 function createBrowserBridge() {
   const demo = {
@@ -255,33 +256,77 @@ function shortDate(dayKey, index) {
   return `${date.getMonth() + 1}月${date.getDate()}日 · 周${weekdays[date.getDay()]}`;
 }
 
+function clockTime(timestamp) {
+  return Number.isFinite(Number(timestamp))
+    ? new Date(Number(timestamp)).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })
+    : '--:--';
+}
+
+function reviewTimeline(day) {
+  const rawStart = Number(day.rangeStartAt); const rawEnd = Number(day.rangeEndAt);
+  if (!Number.isFinite(rawStart) || !Number.isFinite(rawEnd) || rawEnd <= rawStart) return '<p class="review-empty">这一天还没有形成可绘制的时间线。</p>';
+  const axisStartDate = new Date(rawStart); axisStartDate.setMinutes(0, 0, 0);
+  const axisEndDate = new Date(rawEnd); axisEndDate.setMinutes(0, 0, 0); if (axisEndDate.getTime() < rawEnd) axisEndDate.setHours(axisEndDate.getHours() + 1);
+  const axisStart = axisStartDate.getTime(); const axisEnd = Math.max(axisStart + 3_600_000, axisEndDate.getTime()); const span = axisEnd - axisStart;
+  const position = (timestamp) => Math.max(0, Math.min(100, (Number(timestamp) - axisStart) / span * 100));
+  const totalHours = Math.max(1, Math.round(span / 3_600_000)); const hourStep = totalHours > 13 ? 2 : 1;
+  const hours = [];
+  for (let hour = 0; hour <= totalHours; hour += hourStep) {
+    const timestamp = axisStart + hour * 3_600_000;
+    hours.push(`<span style="left:${position(timestamp)}%">${new Date(timestamp).getHours()}</span>`);
+  }
+  const kindLabel = { focus: '专注', break: '休息', excluded: '固定休息', unrecorded: '未记录' };
+  const segments = (day.timeline || []).map((item) => {
+    const left = position(item.startedAt); const right = position(item.endedAt);
+    const label = item.kind === 'focus' ? item.taskTitle || '未命名任务' : kindLabel[item.kind] || '未记录';
+    return `<span class="review-timeline-segment kind-${escapeAttr(item.kind || 'unrecorded')}" style="left:${left}%;width:${Math.max(.7, right - left)}%" title="${escapeAttr(`${clockTime(item.startedAt)}–${clockTime(item.endedAt)} ${label}`)}">${escapeHtml(label)}</span>`;
+  }).join('');
+  const reminderEvents = day.reminderTimeline?.length
+    ? day.reminderTimeline
+    : Object.entries(day.reminderBuckets || {}).map(([time, count]) => ({ text: '健康提醒', firedAt: new Date(`${day.date}T${time}:00`).getTime(), count }));
+  const reminderMarkers = reminderEvents.map((event) => {
+    const reminder = event.text || '健康提醒';
+    const marker = reminder.includes('水') ? '水' : /动|活动|运动|站/.test(reminder) ? '动' : '醒';
+    return `<span class="review-reminder-marker" style="left:${position(event.firedAt)}%" title="${escapeAttr(`${clockTime(event.firedAt)} ${reminder}${event.count ? ` ${event.count} 次` : ''}`)}">${marker}</span>`;
+  }).join('');
+  return `<div class="review-timeline-axis">${hours.join('')}</div><div class="review-timeline-row"><strong>记录状态</strong><div class="review-timeline-track">${segments}</div></div><div class="review-timeline-row"><strong>健康节奏</strong><div class="review-timeline-track health-track">${reminderMarkers}</div></div>`;
+}
+
+function reviewSuggestions(day) {
+  const suggestions = [];
+  const focus = Number(day.totals?.focusMs) || 0; const tasks = day.tasks || [];
+  if (tasks.length && focus) {
+    const share = Math.round(tasks[0].ms / focus * 100);
+    suggestions.push(`今天投入最多的是“${tasks[0].title}”，占有效专注约 ${share}%。最重要的事有被认真照顾到。`);
+  } else suggestions.push('这一天还没有专注记录。需要回顾时，从最重要的一件事开始计时就够了。');
+  if (day.extensionCount) suggestions.push(`下班后又延长了 ${day.extensionCount} 次。明天把最后一颗番茄放到计划下班前，收尾会轻松一点。`);
+  else if ((day.totals?.breakMs || 0) < focus * .12 && focus) suggestions.push('专注很多，主动休息偏少。下一颗番茄结束后，让眼睛和肩膀先离开屏幕几分钟。');
+  else if ((day.reminders || []).length) suggestions.push(`末末今天提醒了 ${(day.reminders || []).reduce((sum, item) => sum + item.count, 0)} 次，工作节奏里也记得给身体留位置。`);
+  else suggestions.push('今天的工作边界挺清楚。继续让专注有终点，也让休息真的发生。');
+  return suggestions.slice(0, 2);
+}
+
 function renderReview() {
   const days = state.review?.days || [];
-  const weekFocus = days.reduce((sum, day) => sum + (day.totals?.focusMs || 0), 0);
-  const weekBreak = days.reduce((sum, day) => sum + (day.totals?.breakMs || 0), 0);
-  const weekReminders = days.reduce((sum, day) => sum + (day.reminders || []).reduce((count, item) => count + item.count, 0), 0);
-  $('#reviewSummary').innerHTML = `<div><span>7 天专注</span><strong>${compactDuration(weekFocus)}</strong></div><div><span>主动休息</span><strong>${compactDuration(weekBreak)}</strong></div><div><span>健康提醒</span><strong>${weekReminders} 次</strong></div>`;
-  const extensions = days.reduce((sum, day) => sum + (day.extensionCount || 0), 0);
-  const restTimeWork = days.reduce((sum, day) => sum + (day.restTimeWorkMs || 0), 0);
-  const unrecorded = days.reduce((sum, day) => sum + (day.totals?.unrecordedMs || 0), 0);
-  const suggestion = restTimeWork > 30 * 60_000
-    ? `有 ${compactDuration(restTimeWork)} 的专注落在休息时段，明天试着把午休真正留给自己。`
-    : extensions >= 3
-      ? `这周已经 ${extensions} 次选择继续加班。明天把最后一颗番茄安排在计划下班前。`
-      : weekFocus > 0 && weekBreak < weekFocus * .12
-        ? '休息占比有点低。每完成一颗番茄，就让末末陪你离开屏幕几分钟。'
-        : unrecorded > weekFocus && weekFocus > 0
-          ? '未记录时间比专注时间更多，可以从最重要的三件事开始计时，不必记录所有琐事。'
-          : '节奏看起来挺稳：继续让专注有终点，也让休息真的发生。';
-  $('#reviewGuidance').textContent = suggestion;
-  const reminderTotals = new Map();
-  for (const day of days) for (const item of day.reminders || []) reminderTotals.set(item.text, (reminderTotals.get(item.text) || 0) + item.count);
-  $('#reviewReminderTotals').innerHTML = [...reminderTotals.entries()].sort((a, b) => b[1] - a[1]).map(([text, count]) => `<span>${escapeHtml(text)} <b>${count}</b> 次</span>`).join('');
-  $('#reviewDays').innerHTML = days.map((day, index) => {
-    const task = day.tasks?.[0]; const reminderText = (day.reminders || []).slice(0, 2).map((item) => `${escapeHtml(item.text)} ${item.count} 次`).join(' · ');
-    const finalTime = day.actualOffworkAt ? new Date(day.actualOffworkAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false }) : '尚未收工';
-    return `<article class="review-day"><header><div><strong>${shortDate(day.date, index)}</strong><span>${finalTime}${day.extensionCount ? ` · 延长 ${day.extensionCount} 次` : ''}</span></div><b>${compactDuration(day.totals?.focusMs)}</b></header><div class="review-bars"><i style="--focus:${Math.min(100, Math.round((day.totals?.focusMs || 0) / Math.max(1, (day.rangeEndAt || 0) - (day.rangeStartAt || 0)) * 100))}%"></i></div><div class="review-metrics"><span>专注 ${compactDuration(day.totals?.focusMs)}</span><span>休息 ${compactDuration(day.totals?.breakMs)}</span><span>排除 ${compactDuration(day.totals?.excludedMs)}</span><span>未记录 ${compactDuration(day.totals?.unrecordedMs)}</span></div><footer><span>${task ? `${escapeHtml(task.title)} ${compactDuration(task.ms)}` : '暂无专注记录'}</span><span>${reminderText || '暂无健康提醒'}</span></footer></article>`;
-  }).join('') || '<p class="empty">开始一颗番茄后，这里会出现你的时间足迹。</p>';
+  if (!days.some((day) => day.date === selectedReviewDate)) selectedReviewDate = days[0]?.date || null;
+  $('#reviewDateList').innerHTML = days.map((day, index) => `<button type="button" data-review-date="${escapeAttr(day.date)}" aria-current="${day.date === selectedReviewDate ? 'date' : 'false'}"><span>${shortDate(day.date, index)}</span><small>${compactDuration(day.totals?.focusMs)}专注</small></button>`).join('');
+  $('#reviewDateSelect').innerHTML = days.map((day, index) => `<option value="${escapeAttr(day.date)}" ${day.date === selectedReviewDate ? 'selected' : ''}>${shortDate(day.date, index)} · ${compactDuration(day.totals?.focusMs)}</option>`).join('');
+  $$('#reviewDateList button').forEach((button) => { button.onclick = () => { selectedReviewDate = button.dataset.reviewDate; renderReview(); }; });
+  $('#reviewDateSelect').onchange = (event) => { selectedReviewDate = event.target.value; renderReview(); };
+  const day = days.find((item) => item.date === selectedReviewDate);
+  if (!day) {
+    $('#reviewSelectedDate').textContent = '时间花在哪里'; $('#reviewSummary').replaceChildren(); $('#reviewTimeline').innerHTML = '<p class="review-empty">开始一颗番茄后，这里会出现你的时间足迹。</p>'; $('#reviewTasks').replaceChildren(); $('#reviewInsights').replaceChildren(); $('#reviewReminderTotals').replaceChildren(); return;
+  }
+  const index = days.indexOf(day); const finalTime = day.actualOffworkAt ? clockTime(day.actualOffworkAt) : '尚未收工';
+  $('#reviewSelectedDate').textContent = `${shortDate(day.date, index)} · 时间花在哪里`;
+  $('#reviewSummary').innerHTML = `<div><span>有效专注</span><strong>${compactDuration(day.totals?.focusMs)}</strong><small>${day.counts?.natural || 0} 颗自然完成</small></div><div><span>休息与恢复</span><strong>${compactDuration(day.totals?.breakMs)}</strong><small>${day.restTimeWorkMs ? `休息时段工作 ${compactDuration(day.restTimeWorkMs)}` : '节奏由你主动记录'}</small></div><div><span>最终收工</span><strong>${finalTime}</strong><small>${day.extensionCount ? `延长 ${day.extensionCount} 次` : '没有继续延长'}</small></div><div><span>未记录空档</span><strong>${compactDuration(day.totals?.unrecordedMs)}</strong><small>不用记录所有琐事</small></div>`;
+  $('#reviewRangeLabel').textContent = `${clockTime(day.rangeStartAt)}–${clockTime(day.rangeEndAt)}`;
+  $('#reviewTimeline').innerHTML = reviewTimeline(day);
+  $('#reviewReminderTotals').innerHTML = (day.reminders || []).map((item) => `<span>${escapeHtml(item.text)} <b>${item.count}</b> 次</span>`).join('') || '<span>暂无健康提醒</span>';
+  const tasks = day.tasks || []; const maximum = Math.max(1, ...tasks.map((task) => task.ms || 0));
+  $('#reviewTasks').innerHTML = tasks.map((task, taskIndex) => `<div class="review-task-row"><span title="${escapeAttr(task.title)}">${escapeHtml(task.title)}</span><div><i style="width:${Math.max(3, Math.round((task.ms || 0) / maximum * 100))}%;--task-color:var(--review-task-${taskIndex % 4})"></i></div><b>${compactDuration(task.ms)}</b></div>`).join('') || '<p class="review-empty">这一天暂无专注任务。</p>';
+  const suggestions = reviewSuggestions(day);
+  $('#reviewInsights').innerHTML = `<h3>末末只说两件有用的事</h3>${suggestions.map((text) => `<p>${escapeHtml(text)}</p>`).join('')}`;
 }
 
 function renderBreakContinuation() {
