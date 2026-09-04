@@ -10,7 +10,8 @@ export default defineConfig({
     rollupOptions: {
       input: {
         control: resolve(import.meta.dirname, 'src/ui/index.html'),
-        pet: resolve(import.meta.dirname, 'src/ui/pet.html')
+        pet: resolve(import.meta.dirname, 'src/ui/pet.html'),
+        block: resolve(import.meta.dirname, 'src/ui/block.html')
       }
     }
   }

@@ -18,6 +18,14 @@ describe('asset path helpers', () => {
     );
   });
 
+  it('uses the animated blue cup GIF for the water reminder pose', () => {
+    const href = 'file:///Applications/Pomopet.app/Contents/Resources/app.asar/dist/app/pet.html';
+
+    expect(companionAnimationSrc('water', href)).toBe(
+      'file:///Applications/Pomopet.app/Contents/Resources/app.asar/dist/app/assets/pet/momo-water.gif'
+    );
+  });
+
   it('resolves animated companion GIFs beside the current page for packaged file URLs', () => {
     const href = 'file:///Applications/Pomopet.app/Contents/Resources/app.asar/dist/app/pet.html';
 

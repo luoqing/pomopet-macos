@@ -29,6 +29,11 @@ export const COPY = {
     { text: '你继续装忙，我继续鼓腮。我们都有光明的未来。', emotion: 'angry' },
     { text: '很好，我已正式躺平。需要我的时候请翻面。', emotion: 'sarcastic' }
   ],
+  ambientCompanion: [
+    { text: '我在。你可以继续忙，也可以摸我一下续个小电。', emotion: 'comfort' },
+    { text: '巡逻结束：键盘正常，杯子正常，你也要正常喝水。', emotion: 'cute' },
+    { text: '我刚刚安静陪了你一会儿。现在申请一个三秒钟眼神交流。', emotion: 'happy' }
+  ],
   interactionPet: [{ text: '摸到头顶那撮毛了吗？那里今天负责接收好运。', emotion: 'cute' }, { text: '再摸一下，我就把今天的烦恼打包丢远一点。', emotion: 'happy' }],
   interactionFeed: [{ text: '嗷呜！饼干到账，陪伴服务立刻续费。', emotion: 'happy' }, { text: '这块我先替你尝尝。嗯，是“继续加油”味的。', emotion: 'cute' }],
   interactionBall: [{ text: '球来了！我冲！你负责夸，不许省略形容词。', emotion: 'happy' }, { text: '捡回来啦，还顺路捡回一点好心情。', emotion: 'cute' }],

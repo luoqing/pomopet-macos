@@ -1,0 +1,261 @@
+.pet-water-motion {
+  --pet-motion-width: 365px;
+  position: relative;
+  width: min(var(--pet-motion-width), 100%);
+  aspect-ratio: 365 / 405;
+  isolation: isolate;
+}
+
+.pet-water-motion,
+.pet-water-motion * {
+  box-sizing: border-box;
+}
+
+.water-motion__shadow {
+  position: absolute;
+  left: 22%;
+  right: 21%;
+  bottom: 1.5%;
+  height: 9%;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at center, rgba(91, 64, 43, 0.24), rgba(91, 64, 43, 0));
+  filter: blur(5px);
+  transform-origin: 50% 50%;
+  animation: water-shadow-breathe 5.8s ease-in-out infinite;
+  z-index: 0;
+}
+
+.water-motion__body {
+  position: absolute;
+  inset: 0;
+  transform-origin: 50% 91%;
+  animation:
+    water-soft-breathe 5.8s cubic-bezier(0.45, 0, 0.25, 1) infinite,
+    water-sip-microbeat 12.5s linear infinite;
+  z-index: 1;
+  will-change: transform;
+}
+
+.water-motion__art {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  filter: drop-shadow(0 16px 13px rgba(74, 49, 31, 0.17));
+  pointer-events: none;
+  user-select: none;
+}
+
+.water-motion__cup-ripple {
+  position: absolute;
+  left: 40.9%;
+  top: 55.4%;
+  width: 19%;
+  height: 5.2%;
+  border-radius: 50%;
+  background:
+    radial-gradient(ellipse at 38% 45%, rgba(255, 255, 255, 0.74), transparent 23%),
+    radial-gradient(ellipse at 65% 52%, rgba(127, 222, 255, 0.38), transparent 49%),
+    linear-gradient(90deg, rgba(101, 202, 245, 0.24), rgba(255, 255, 255, 0.38), rgba(83, 184, 236, 0.25));
+  mix-blend-mode: screen;
+  opacity: 0.58;
+  transform: rotate(-2deg);
+  animation: water-cup-ripple 3.4s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.water-motion__straw-shine {
+  position: absolute;
+  left: 45.9%;
+  top: 45.2%;
+  width: 2.4%;
+  height: 13.4%;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.8), rgba(255, 255, 255, 0));
+  opacity: 0.42;
+  transform: rotate(14deg);
+  animation: water-straw-glint 6.8s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.water-motion__bubble {
+  position: absolute;
+  left: var(--bubble-left);
+  top: var(--bubble-top);
+  width: var(--bubble-size);
+  height: var(--bubble-size);
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.96) 0 16%, transparent 17%),
+    radial-gradient(circle at center, rgba(120, 222, 255, 0.82), rgba(75, 180, 237, 0.14) 67%, transparent 70%);
+  filter: drop-shadow(0 1px 2px rgba(89, 184, 218, 0.25));
+  opacity: 0;
+  animation: water-bubble-rise var(--bubble-speed) ease-out infinite;
+  animation-delay: var(--bubble-delay);
+  pointer-events: none;
+}
+
+.water-motion__bubble--1 {
+  --bubble-left: 35.7%;
+  --bubble-top: 62.2%;
+  --bubble-size: 4.4%;
+  --bubble-speed: 4.9s;
+  --bubble-delay: 0.4s;
+}
+
+.water-motion__bubble--2 {
+  --bubble-left: 37.7%;
+  --bubble-top: 59.5%;
+  --bubble-size: 2.9%;
+  --bubble-speed: 5.7s;
+  --bubble-delay: 2.1s;
+}
+
+.water-motion__bubble--3 {
+  --bubble-left: 33.8%;
+  --bubble-top: 65.5%;
+  --bubble-size: 2.5%;
+  --bubble-speed: 6.2s;
+  --bubble-delay: 3.8s;
+}
+
+.water-motion__bubble--4 {
+  --bubble-left: 41.2%;
+  --bubble-top: 62.8%;
+  --bubble-size: 2%;
+  --bubble-speed: 5.2s;
+  --bubble-delay: 5.4s;
+}
+
+.water-motion__cheek-warmth {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse at 30% 43%, rgba(255, 122, 120, 0.17), transparent 7%),
+    radial-gradient(ellipse at 70% 43%, rgba(255, 122, 120, 0.16), transparent 7%);
+  mix-blend-mode: multiply;
+  opacity: 0.28;
+  animation: water-cheek-warmth 5.8s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes water-soft-breathe {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) rotate(0deg) scale(1);
+  }
+  33% {
+    transform: translate3d(-0.6%, -1.2%, 0) rotate(-0.32deg) scaleX(1.003) scaleY(1.006);
+  }
+  68% {
+    transform: translate3d(0.45%, 0.15%, 0) rotate(0.24deg) scaleX(0.998) scaleY(0.997);
+  }
+}
+
+@keyframes water-sip-microbeat {
+  0%,
+  14%,
+  21%,
+  53%,
+  60%,
+  100% {
+    translate: 0 0;
+  }
+  16% {
+    translate: 0 0.8%;
+  }
+  18% {
+    translate: 0 -0.25%;
+  }
+  55% {
+    translate: 0.2% 0.55%;
+  }
+  57% {
+    translate: 0 -0.15%;
+  }
+}
+
+@keyframes water-shadow-breathe {
+  0%,
+  100% {
+    opacity: 0.62;
+    transform: scaleX(1) scaleY(1);
+  }
+  38% {
+    opacity: 0.48;
+    transform: scaleX(0.92) scaleY(0.82);
+  }
+  70% {
+    opacity: 0.68;
+    transform: scaleX(1.06) scaleY(1.05);
+  }
+}
+
+@keyframes water-cup-ripple {
+  0%,
+  100% {
+    opacity: 0.42;
+    transform: rotate(-2deg) translateX(0) scaleX(0.92);
+  }
+  45% {
+    opacity: 0.68;
+    transform: rotate(-1deg) translateX(2.5%) scaleX(1.08);
+  }
+  72% {
+    opacity: 0.52;
+    transform: rotate(-2.5deg) translateX(-1.3%) scaleX(0.98);
+  }
+}
+
+@keyframes water-straw-glint {
+  0%,
+  74%,
+  100% {
+    opacity: 0;
+    transform: rotate(14deg) translateY(-7%);
+  }
+  81% {
+    opacity: 0.56;
+  }
+  88% {
+    opacity: 0.18;
+    transform: rotate(14deg) translateY(10%);
+  }
+}
+
+@keyframes water-bubble-rise {
+  0%,
+  52% {
+    opacity: 0;
+    transform: translate3d(0, 0, 0) scale(0.5);
+  }
+  61% {
+    opacity: 0.78;
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(-38%, -132%, 0) scale(1.08);
+  }
+}
+
+@keyframes water-cheek-warmth {
+  0%,
+  100% {
+    opacity: 0.22;
+  }
+  45% {
+    opacity: 0.34;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .water-motion__body,
+  .water-motion__shadow,
+  .water-motion__cup-ripple,
+  .water-motion__straw-shine,
+  .water-motion__bubble,
+  .water-motion__cheek-warmth {
+    animation-duration: 1ms;
+    animation-iteration-count: 1;
+  }
+}

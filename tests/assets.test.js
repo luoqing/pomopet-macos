@@ -1,6 +1,7 @@
 import { access, readFile, stat } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
 import { COPY } from '../src/core/copy.js';
+import { PET_POSES } from '../src/ui/pet-poses.js';
 
 describe('bundled companion assets', () => {
   it('contains every voice file referenced by built-in copy', async () => {
@@ -9,10 +10,11 @@ describe('bundled companion assets', () => {
     for (const id of ids) { const file = 'src/ui/public/audio/' + id + '.mp3'; await access(file); expect((await stat(file)).size).toBeGreaterThan(1_000); }
   });
   it('contains every illustrated pet pose and the application icon', async () => {
-    const poses = ['focus', 'reward', 'ball', 'sleepy', 'fainted', 'annoyed', 'pet', 'feed', 'water'];
-    const animations = [...poses, 'comfort', 'water'];
+    const gifOnly = new Set(['comfort', 'aggrieved', 'angry-standing']);
+    const stills = PET_POSES.map((pose) => pose.asset).filter((pose) => !gifOnly.has(pose));
+    const animations = PET_POSES.map((pose) => pose.asset);
     const files = [
-      ...poses.map((pose) => `src/ui/public/assets/pet/momo-${pose}.png`),
+      ...stills.map((pose) => `src/ui/public/assets/pet/momo-${pose}.png`),
       ...animations.map((pose) => `src/ui/public/assets/pet/momo-${pose}.gif`),
       'build/icon.png'
     ];
@@ -23,5 +25,12 @@ describe('bundled companion assets', () => {
     const preload = await readFile('src/platform/electron/preload.cjs', 'utf8');
     expect(main).toContain("preload.cjs");
     expect(preload).toContain("contextBridge.exposeInMainWorld('pomopet'");
+  });
+  it('resolves dynamically rendered reminder images relative to the packaged page', async () => {
+    const control = await readFile('src/ui/control.js', 'utf8');
+    expect(control).toContain("import { companionAnimationSrc } from './asset-paths.js'");
+    expect(control).toContain("const poseSrc = companionAnimationSrc(PET_POSE_ASSETS[pose] || 'annoyed')");
+    expect(control).toContain('src="${escapeAttr(poseSrc)}"');
+    expect(control).not.toContain('src="/assets/pet/momo-${');
   });
 });

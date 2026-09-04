@@ -1,6 +1,6 @@
 {
   "name": "pomopet",
-  "version": "0.1.4",
+  "version": "0.1.25",
   "description": "一只陪你工作的桌面小狗",
   "author": "Pomopet",
   "type": "module",
@@ -10,7 +10,7 @@
     "start": "electron .",
     "start:test": "POMOPET_TEST=1 electron .",
     "lint": "eslint .",
-    "test": "vitest run --root . --exclude 'tests/ui/**'",
+    "test": "vitest run --root . tests --exclude 'tests/ui/**' --exclude '.worktrees/**'",
     "test:soak": "vitest run --root . tests/soak.test.js",
     "test:ui": "npm run build && NO_PROXY=127.0.0.1,localhost no_proxy=127.0.0.1,localhost playwright test",
     "preview:test": "vite preview --host 127.0.0.1 --port 4173",
@@ -34,45 +34,20 @@
     "appId": "cn.pomopet.desktop",
     "productName": "Pomopet",
     "asar": true,
-    "directories": {
-      "output": "dist/release"
-    },
-    "files": [
-      "dist/app/**/*",
-      "src/platform/electron/**/*",
-      "src/core/**/*",
-      "package.json"
-    ],
+    "directories": { "output": "dist/release" },
+    "files": ["dist/app/**/*", "src/platform/electron/**/*", "src/core/**/*", "package.json"],
     "mac": {
       "category": "public.app-category.productivity",
       "icon": "build/icon.png",
       "target": [
-        {
-          "target": "dmg",
-          "arch": [
-            "arm64"
-          ]
-        },
-        {
-          "target": "zip",
-          "arch": [
-            "arm64"
-          ]
-        }
+        { "target": "dmg", "arch": ["arm64"] },
+        { "target": "zip", "arch": ["arm64"] }
       ],
       "hardenedRuntime": true,
       "gatekeeperAssess": false,
       "identity": null,
-      "extendInfo": {
-        "NSUserNotificationUsageDescription": "Pomopet 需要通知权限，以便在窗口隐藏时提醒闹钟和休息。"
-      }
+      "extendInfo": { "NSUserNotificationUsageDescription": "Pomopet 需要通知权限，以便在窗口隐藏时提醒闹钟和休息。" }
     },
-    "linux": {
-      "target": [
-        "dir"
-      ],
-      "category": "Utility",
-      "icon": "build/icon.png"
-    }
+    "linux": { "target": ["dir"], "category": "Utility", "icon": "build/icon.png" }
   }
 }
