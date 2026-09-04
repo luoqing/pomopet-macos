@@ -309,9 +309,7 @@ function reviewSuggestions(day) {
 function renderReview() {
   const days = state.review?.days || [];
   if (!days.some((day) => day.date === selectedReviewDate)) selectedReviewDate = days[0]?.date || null;
-  $('#reviewDateList').innerHTML = days.map((day, index) => `<button type="button" data-review-date="${escapeAttr(day.date)}" aria-current="${day.date === selectedReviewDate ? 'date' : 'false'}"><span>${shortDate(day.date, index)}</span><small>${compactDuration(day.totals?.focusMs)}专注</small></button>`).join('');
   $('#reviewDateSelect').innerHTML = days.map((day, index) => `<option value="${escapeAttr(day.date)}" ${day.date === selectedReviewDate ? 'selected' : ''}>${shortDate(day.date, index)} · ${compactDuration(day.totals?.focusMs)}</option>`).join('');
-  $$('#reviewDateList button').forEach((button) => { button.onclick = () => { selectedReviewDate = button.dataset.reviewDate; renderReview(); }; });
   $('#reviewDateSelect').onchange = (event) => { selectedReviewDate = event.target.value; renderReview(); };
   const day = days.find((item) => item.date === selectedReviewDate);
   if (!day) {

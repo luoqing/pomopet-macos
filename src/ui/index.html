@@ -22,10 +22,6 @@
     <section class="drawer paper" id="offworkPanel"><div class="drawer-head"><div><h2>到点收工，不和电脑白头偕老</h2><p>设好工作边界，末末负责在你舍不得走时认真拦住你。</p></div><div class="panel-tools"><button id="editOffwork" class="small">编辑</button><button id="cancelOffwork" class="small hidden">取消</button></div></div><div class="settings-grid"><label class="switch-row"><input id="offworkEnabled" type="checkbox"><span>开启下班提醒</span></label><label>上班时间<input id="workStart" type="time" value="10:00"></label><label>计划下班提醒<input id="offworkTime" type="time" value="18:30"></label><label>最晚下班时间<input id="latestOffworkTime" type="time" value="22:30"></label><label>到点动作<select id="offworkPose"><option value="sleepy">趴下等你</option><option value="fainted">原地装死</option></select></label><label class="switch-row"><input id="offworkBlockMode" type="checkbox"><span>下班时变大挡住桌面</span></label><label>被忽略后<input id="escalateMinutes" type="number" min="5" max="120" value="15"> 分钟鼓腮</label><label>稍后提醒<input id="offworkSnooze" type="number" min="5" max="120" value="15"> 分钟</label></div><div class="exclusion-settings"><strong>不计入工作分布</strong><div><span>午休</span><input id="lunchStart" type="time" value="12:00"><b>到</b><input id="lunchEnd" type="time" value="14:00"></div><div><span>晚餐</span><input id="dinnerStart" type="time" value="18:00"><b>到</b><input id="dinnerEnd" type="time" value="19:00"></div></div><div class="weekday-row" id="offworkDays"></div><p class="form-error" id="offworkError" role="alert"></p><button id="saveOffwork" class="primary small">保存下班规则</button></section>
     <section class="drawer paper review-drawer" id="reviewPanel">
       <div class="review-layout">
-        <aside class="review-date-rail" aria-label="最近七天">
-          <strong>最近 7 天</strong>
-          <div class="review-date-list" id="reviewDateList"></div>
-        </aside>
         <div class="review-detail">
           <header class="review-detail-head">
             <div><h2 id="reviewSelectedDate">今天 · 时间花在哪里</h2><p>只统计你主动交给 Pomopet 的时间，固定休息与生活时段自动排除。</p></div>

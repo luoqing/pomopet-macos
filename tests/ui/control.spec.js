@@ -928,7 +928,7 @@ test('main timer exposes elapsed progress and routes early break completion expl
   expect(await page.evaluate(() => globalThis.__timerCommands.at(-1))).toEqual({ name: 'timer:endBreak', payload: undefined });
 });
 
-test('time review uses seven-day navigation and renders the selected day timeline and task distribution', async ({ page }) => {
+test('time review matches the full-width daily report prototype with date navigation and task distribution', async ({ page }) => {
   await page.addInitScript(() => {
     const nowDate = new Date(); nowDate.setHours(20, 47, 0, 0); const now = nowDate.getTime();
     const days = Array.from({ length: 7 }, (_, index) => ({
@@ -959,8 +959,10 @@ test('time review uses seven-day navigation and renders the selected day timelin
     globalThis.__emitReviewState = () => listeners.forEach((callback) => callback(structuredClone(state)));
     globalThis.pomopet = { getState: async () => structuredClone(state), onState: (callback) => { listeners.push(callback); return () => {}; }, command: async () => structuredClone(state), showControl: () => {}, setDirty: () => {}, onDiscardDrafts: () => () => {} };
   });
+  await page.setViewportSize({ width: 1040, height: 900 });
   await page.goto('/'); await page.getByRole('tab', { name: '时间回顾' }).click();
-  await expect(page.locator('#reviewDateList button')).toHaveCount(7);
+  await expect(page.locator('#reviewDateSelect option')).toHaveCount(7);
+  await expect(page.locator('#reviewDateSelect')).toBeVisible();
   await expect(page.locator('#reviewSelectedDate')).toContainText('时间花在哪里');
   await expect(page.locator('#reviewTimeline .review-timeline-segment')).toHaveCount(4);
   expect(await page.locator('#reviewTimeline .review-reminder-marker').allTextContents()).toEqual(['水', '动']);
@@ -969,15 +971,17 @@ test('time review uses seven-day navigation and renders the selected day timelin
   await expect(page.locator('#reviewTasks')).toContainText('代码实现');
   await expect(page.locator('#reviewInsights p')).toHaveCount(2);
   await expect(page.locator('#reviewPanel')).toContainText('起来喝水');
-  await page.locator('#reviewDateList button').nth(1).click();
+  expect(await page.locator('#reviewSummary strong').evaluateAll((items) => items.every((item) => item.scrollWidth <= item.clientWidth))).toBe(true);
+  const secondDate = await page.locator('#reviewDateSelect option').nth(1).getAttribute('value');
+  const firstDate = await page.locator('#reviewDateSelect option').first().getAttribute('value');
+  await page.locator('#reviewDateSelect').selectOption(secondDate);
   await expect(page.locator('#reviewTasks')).toContainText('历史任务 1');
   await expect(page.locator('#reviewTasks')).not.toContainText('产品设计');
   await page.evaluate(() => globalThis.__emitReviewState());
-  await expect(page.locator('#reviewDateList button').nth(1)).toHaveAttribute('aria-current', 'date');
-  await page.locator('#reviewDateList button').first().click();
+  await expect(page.locator('#reviewDateSelect')).toHaveValue(secondDate);
+  await page.locator('#reviewDateSelect').selectOption(firstDate);
   await page.screenshot({ path: 'artifacts/screenshots/time-review-desktop.png', fullPage: true });
   await page.setViewportSize({ width: 680, height: 900 });
-  await expect(page.locator('#reviewDateList')).toBeHidden();
   await expect(page.locator('#reviewDateSelect')).toBeVisible();
   await page.screenshot({ path: 'artifacts/screenshots/time-review-narrow.png', fullPage: true });
 });
