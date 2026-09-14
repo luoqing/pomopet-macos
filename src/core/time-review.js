@@ -22,6 +22,36 @@ function normalizedSegments(interval, rangeStart, rangeEnd) {
   });
 }
 
+function atDayTime(dayKey, time) {
+  const [hour, minute] = time.split(':').map(Number);
+  return dayStart(dayKey) + (hour * 60 + minute) * 60 * 1000;
+}
+
+function meetingIntervalsForDay(meetings = [], dayKey) {
+  const weekday = new Date(`${dayKey}T12:00:00`).getDay();
+  return (meetings ?? [])
+    .filter((meeting) => meeting?.enabled !== false && (meeting.weekdays ?? []).includes(weekday) && meeting.startTime < meeting.endTime)
+    .map((meeting) => {
+      const startedAt = atDayTime(dayKey, meeting.startTime);
+      const endedAt = atDayTime(dayKey, meeting.endTime);
+      return {
+        id: `meeting:${meeting.id}:${dayKey}`,
+        sourceId: `meeting:${meeting.id}`,
+        cycleId: meeting.id,
+        kind: 'meeting',
+        todoId: null,
+        taskTitle: '',
+        label: meeting.title || '会议',
+        startedAt,
+        endedAt,
+        segments: [{ startedAt, endedAt }],
+        status: 'completed',
+        completionReason: 'scheduled',
+        unplacedActiveMs: 0
+      };
+    });
+}
+
 function overlapMs(left, right) {
   return Math.max(0, Math.min(left.endedAt, right.endedAt) - Math.max(left.startedAt, right.startedAt));
 }
@@ -35,7 +65,8 @@ function resolveRangeEnd(day, now) {
   const intervalEnds = (day.intervals ?? []).flatMap((interval) =>
     (interval.segments ?? []).map((segment) => Number(segment.endedAt)).filter(Number.isFinite));
   const reminderTimes = (day.reminderOccurrences ?? []).map((item) => Number(item.firedAt)).filter(Number.isFinite);
-  return Math.max(Number(day.rangeStartAt) || dayStart(day.date), ...intervalEnds, ...reminderTimes);
+  const meetingEnds = (day.meetingTimeline ?? []).map((item) => Number(item.endedAt)).filter(Number.isFinite);
+  return Math.max(Number(day.rangeStartAt) || dayStart(day.date), ...intervalEnds, ...reminderTimes, ...meetingEnds);
 }
 
 function currentIntervalForDay(currentTimer, dayKey, now) {
@@ -67,7 +98,7 @@ function classifyTimeline(intervals, rangeStart, rangeEnd) {
     normalizedSegments(interval, rangeStart, rangeEnd).map((segment) => ({ ...segment, interval })));
   const boundaries = [...new Set([rangeStart, rangeEnd, ...candidates.flatMap((item) => [item.startedAt, item.endedAt])])]
     .sort((left, right) => left - right);
-  const priority = { excluded: 3, focus: 2, break: 1 };
+  const priority = { excluded: 4, focus: 3, meeting: 2, break: 1 };
   const timeline = [];
 
   for (let index = 0; index < boundaries.length - 1; index += 1) {
@@ -83,7 +114,8 @@ function classifyTimeline(intervals, rangeStart, rangeEnd) {
       endedAt,
       kind: interval?.kind ?? 'unrecorded',
       todoId: interval?.todoId ?? null,
-      taskTitle: interval?.taskTitle ?? ''
+      taskTitle: interval?.taskTitle ?? '',
+      label: interval?.label ?? null
     });
   }
   return timeline;
@@ -108,13 +140,15 @@ function aggregateTasks(timeline, intervals) {
   return [...tasks.values()].sort((left, right) => right.ms - left.ms);
 }
 
-export function reviewDay(sourceDay, { now = Date.now(), currentTimer = null } = {}) {
+export function reviewDay(sourceDay, { now = Date.now(), currentTimer = null, meetings = [] } = {}) {
   const day = sourceDay ?? { date: localDayKey(now) };
   const rangeStartAt = Number(day.rangeStartAt) || dayStart(day.date);
   const current = currentIntervalForDay(currentTimer, day.date, now);
   const currentRangeEnd = current ? Math.min(now, dayStart(day.date) + 24 * 60 * 60 * 1000) : rangeStartAt;
-  const rangeEndAt = Math.max(rangeStartAt, resolveRangeEnd(day, now), currentRangeEnd);
-  const intervals = [...(day.intervals ?? []), ...(current ? [current] : [])];
+  const meetingTimeline = meetingIntervalsForDay(meetings, day.date);
+  const withMeetings = { ...day, meetingTimeline };
+  const rangeEndAt = Math.max(rangeStartAt, resolveRangeEnd(withMeetings, now), currentRangeEnd);
+  const intervals = [...(day.intervals ?? []), ...meetingTimeline, ...(current ? [current] : [])];
   const timeline = classifyTimeline(intervals, rangeStartAt, rangeEndAt);
   const sum = (kind) => timeline
     .filter((item) => item.kind === kind)
@@ -171,6 +205,8 @@ export function reviewDay(sourceDay, { now = Date.now(), currentTimer = null } =
     totals: {
       focusMs: sum('focus') + unplacedMs,
       breakMs: sum('break'),
+      meetingMs: sum('meeting'),
+      scheduledMeetingMs: meetingTimeline.reduce((total, meeting) => total + Math.max(0, meeting.endedAt - meeting.startedAt), 0),
       excludedMs: sum('excluded'),
       unrecordedMs: sum('unrecorded'),
       pausedMs,
@@ -182,11 +218,12 @@ export function reviewDay(sourceDay, { now = Date.now(), currentTimer = null } =
     reminders: [...remindersByText.values()].sort((left, right) => right.count - left.count),
     reminderBuckets,
     reminderTimeline: reminderTimeline.sort((left, right) => left.firedAt - right.firedAt),
+    meetingTimeline: meetingTimeline.sort((left, right) => left.startedAt - right.startedAt),
     timeline
   };
 }
 
-export function reviewRecentDays({ analytics = {}, now = Date.now(), days = 7, currentTimer = null, workStart = '10:00' } = {}) {
+export function reviewRecentDays({ analytics = {}, now = Date.now(), days = 7, currentTimer = null, workStart = '10:00', meetings = [] } = {}) {
   const cursor = new Date(now);
   const result = [];
   for (let offset = 0; offset < days; offset += 1) {
@@ -204,7 +241,7 @@ export function reviewRecentDays({ analytics = {}, now = Date.now(), days = 7, c
       reminderOccurrences: [],
       workdayEvents: []
     };
-    result.push(reviewDay(source, { now, currentTimer }));
+    result.push(reviewDay(source, { now, currentTimer, meetings }));
     cursor.setDate(cursor.getDate() - 1);
   }
   return { generatedAt: now, days: result };

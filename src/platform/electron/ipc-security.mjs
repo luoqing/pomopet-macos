@@ -3,6 +3,7 @@ const CONTROL_COMMANDS = new Set([
   'break:continue', 'break:switch', 'break:idle',
   'todo:add', 'todo:update', 'todo:remove', 'todo:active', 'todo:toggle', 'todo:start',
   'alarm:add', 'alarm:update', 'alarm:remove', 'alarm:enabled', 'alarm:snooze', 'alarm:dismiss',
+  'meeting:add', 'meeting:update', 'meeting:remove', 'meeting:enabled',
   'offwork:update', 'offwork:snooze', 'offwork:dismiss',
   'settings:update', 'persona:update', 'ai:test', 'companion:suppress', 'pet:visible'
 ]);

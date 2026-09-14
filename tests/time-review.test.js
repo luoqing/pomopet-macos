@@ -54,6 +54,34 @@ describe('time review projector', () => {
     expect(result.restTimeWorkMs).toBe(15 * 60_000);
   });
 
+  it('draws meetings without letting them overwrite overlapping focus time', () => {
+    const day = {
+      date: '2026-09-07',
+      rangeStartAt: at('2026-09-07', '10:00'),
+      intervals: [
+        { id: 'focus', cycleId: 'focus', kind: 'focus', taskTitle: '写方案', segments: [segment(at('2026-09-07', '10:30'), at('2026-09-07', '11:30'))], startedAt: at('2026-09-07', '10:30'), endedAt: at('2026-09-07', '11:30'), status: 'completed', completionReason: 'natural', unplacedActiveMs: 0 }
+      ],
+      reminderOccurrences: [],
+      workdayEvents: []
+    };
+
+    const result = reviewDay(day, {
+      now: at('2026-09-07', '12:00'),
+      meetings: [{ id: 'weekly', title: '周会', startTime: '10:00', endTime: '11:00', weekdays: [1], enabled: true, autoMute: true }]
+    });
+
+    expect(result.totals.focusMs).toBe(60 * 60_000);
+    expect(result.totals.meetingMs).toBe(30 * 60_000);
+    expect(result.totals.scheduledMeetingMs).toBe(60 * 60_000);
+    expect(result.meetingTimeline).toEqual([expect.objectContaining({ label: '周会', startedAt: at('2026-09-07', '10:00'), endedAt: at('2026-09-07', '11:00') })]);
+    expect(result.timeline).toEqual([
+      expect.objectContaining({ kind: 'meeting', startedAt: at('2026-09-07', '10:00'), endedAt: at('2026-09-07', '10:30') }),
+      expect.objectContaining({ kind: 'focus', startedAt: at('2026-09-07', '10:30'), endedAt: at('2026-09-07', '11:00') }),
+      expect.objectContaining({ kind: 'focus', startedAt: at('2026-09-07', '11:00'), endedAt: at('2026-09-07', '11:30') }),
+      expect.objectContaining({ kind: 'unrecorded', startedAt: at('2026-09-07', '11:30'), endedAt: at('2026-09-07', '12:00') })
+    ]);
+  });
+
   it('includes open segment preview and legacy unplaced time without mutating input', () => {
     const timer = { status: 'running', phase: 'focus', sessionId: 'open', task: '当前工作', todoId: null, focusMs: 25 * 60_000, startedAt: at('2026-09-04', '15:00'), activeSegments: [{ startedAt: at('2026-09-04', '15:00'), endedAt: null }] };
     const day = { date: '2026-09-04', rangeStartAt: at('2026-09-04', '14:00'), intervals: [{ id: 'legacy', cycleId: 'legacy', kind: 'focus', taskTitle: '旧任务', segments: [], unplacedActiveMs: 8 * 60_000, status: 'stopped', completionReason: 'stopped' }], reminderOccurrences: [], workdayEvents: [] };

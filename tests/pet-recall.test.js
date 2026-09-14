@@ -39,8 +39,15 @@ describe('desktop pet recall', () => {
 
   it('normalizes a saved x/y-only position before asking Electron for its display', async () => {
     const main = await readFile(new URL('../src/platform/electron/main.mjs', import.meta.url), 'utf8');
-    expect(main).toContain('const normalized = { x, y, width, height };');
+    expect(main).toContain('normalizeWindowBounds(bounds, fallback)');
     expect(main).toContain('screen.getDisplayMatching(normalized).workArea');
+  });
+
+  it('uses the combined desktop work area while dragging across displays', async () => {
+    const main = await readFile(new URL('../src/platform/electron/main.mjs', import.meta.url), 'utf8');
+    expect(main).toContain('function clampDraggedPosition(bounds = {})');
+    expect(main).toContain('virtualWorkArea(screen.getAllDisplays())');
+    expect(main).toMatch(/ipcMain\.on\('drag-pet'[\s\S]*clampDraggedPosition/);
   });
 
   it('temporarily wakes formal presentations without overwriting the saved display mode', async () => {

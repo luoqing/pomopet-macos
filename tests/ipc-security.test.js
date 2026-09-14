@@ -28,6 +28,7 @@ describe('renderer IPC authorization', () => {
 
   it.each([
     ['control', 'timer:start'], ['control', 'break:switch'], ['control', 'todo:update'], ['control', 'todo:start'], ['control', 'alarm:add'],
+    ['control', 'meeting:add'], ['control', 'meeting:update'], ['control', 'meeting:remove'], ['control', 'meeting:enabled'],
     ['control', 'settings:update'], ['control', 'persona:update'],
     ['pet', 'interaction'], ['pet', 'timer:pause'], ['pet', 'timer:resume'], ['pet', 'timer:complete'], ['pet', 'timer:endBreak'], ['pet', 'timer:stop'],
     ['pet', 'alarm:snooze'], ['pet', 'offwork:dismiss'], ['pet', 'break:continue'], ['pet', 'settings:mute'], ['pet', 'pet:displayMode'],

@@ -51,6 +51,23 @@ describe('AppRuntime', () => {
     await expect(restored.command('settings:mute', { muted: 'yes' })).rejects.toThrow('invalid_muted_value');
   });
 
+  it('keeps meeting mute separate from the manual mute preference', async () => {
+    const now = new Date(2026, 8, 7, 10, 30).getTime();
+    const clock = new FakeClock(now);
+    const store = new MemoryStore();
+    const runtime = new AppRuntime({ store, clock }); await runtime.init();
+
+    await runtime.command('meeting:add', { id: 'standup', title: '站会', startTime: '10:00', endTime: '11:00', weekdays: [1], autoMute: true, enabled: true });
+    expect(runtime.view().settings).toMatchObject({ muted: true, manualMuted: false, meetingMuted: true });
+
+    await runtime.command('settings:mute', { muted: true });
+    clock.advance(45 * 60_000); await runtime.tick();
+    expect(runtime.view().settings).toMatchObject({ muted: true, manualMuted: true, meetingMuted: false });
+
+    await runtime.command('settings:mute', { muted: false });
+    expect(runtime.view().settings).toMatchObject({ muted: false, manualMuted: false, meetingMuted: false });
+  });
+
   it('defaults to full pet display and persists each desktop display mode', async () => {
     const store = new MemoryStore();
     const runtime = new AppRuntime({ store, clock: new FakeClock(1) }); await runtime.init();
@@ -184,6 +201,8 @@ describe('AppRuntime', () => {
     await runtime.command('alarm:add', { id: 'activity', label: '旧提醒', type: 'weekly', time: '09:00', weekdays: [1], pose: 'annoyed', enabled: true });
     await runtime.command('alarm:update', { id: 'activity', patch: { label: '起来活动', type: 'interval', time: null, weekdays: [1, 2, 3, 4, 5], startTime: '09:30', endTime: '18:30', intervalMinutes: 60, pose: 'ball' } });
     await runtime.command('alarm:enabled', { id: 'activity', enabled: false });
+    await runtime.command('meeting:add', { id: 'review', title: '需求评审', startTime: '16:00', endTime: '17:00', weekdays: [1, 3], autoMute: true, enabled: true });
+    await runtime.command('meeting:update', { id: 'review', patch: { title: '需求评审会', endTime: '17:30', autoMute: false } });
     await runtime.command('offwork:update', { enabled: true, time: '19:15', weekdays: [1, 3, 5], pose: 'fainted', blockMode: true, snoozeMinutes: 20, escalateMinutes: 25 });
     await runtime.command('persona:update', { preset: 'witty', petName: '团子', ownerName: '阿青', customPrompt: '嘴硬心软，提醒要原创。', teaseLevel: 68, chatFrequency: 'lively' });
     await runtime.setAiKey('local-persistence-key');
@@ -193,6 +212,7 @@ describe('AppRuntime', () => {
     expect(restored.view()).toMatchObject({
       todos: { activeId: todoId, items: [{ id: todoId, title: '编辑后的事项', priority: 'P0', estimatePomos: 4 }] },
       alarms: [{ id: 'activity', label: '起来活动', type: 'interval', weekdays: [1, 2, 3, 4, 5], startTime: '09:30', endTime: '18:30', intervalMinutes: 60, pose: 'ball', enabled: false }],
+      meetings: { items: [{ id: 'review', title: '需求评审会', startTime: '16:00', endTime: '17:30', weekdays: [1, 3], autoMute: false, enabled: true }] },
       offwork: { enabled: true, time: '19:15', weekdays: [1, 3, 5], pose: 'fainted', blockMode: true, snoozeMinutes: 20, escalateMinutes: 25 },
       persona: { preset: 'witty', petName: '团子', ownerName: '阿青', customPrompt: '嘴硬心软，提醒要原创。', teaseLevel: 68, chatFrequency: 'lively' },
       settings: { voiceMode: 'all', volume: 0.55, ttsEngine: 'system', edgeTtsVoice: 'zh-CN-YunjianNeural', ttsVoiceName: 'Tingting', aiCopyEnabled: true, aiKeyConfigured: true, companionEnabled: false, interactions: false, launchAtLogin: true }

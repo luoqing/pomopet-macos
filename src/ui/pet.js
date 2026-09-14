@@ -308,13 +308,15 @@ function toggleMenu() {
 }
 
 function syncMuteButton() {
-  const muted = Boolean(state?.settings?.muted);
+  const settings = state?.settings || {};
+  const muted = Boolean(settings.muted);
+  const meetingMuted = Boolean(settings.meetingMuted);
   const button = document.querySelector('#toggleMute');
   button.classList.toggle('is-muted', muted);
-  button.setAttribute('aria-label', muted ? '取消静音' : '静音');
+  button.setAttribute('aria-label', meetingMuted ? '会议静音中' : muted ? '取消静音' : '静音');
   button.querySelector('.mute-icon').textContent = muted ? '🔊' : '🔇';
-  button.querySelector('.mute-label').textContent = muted ? '取消静音' : '静音';
-  button.querySelector('.mute-state').textContent = muted ? '已静音' : '声音开';
+  button.querySelector('.mute-label').textContent = meetingMuted ? '会议静音中' : muted ? '取消静音' : '静音';
+  button.querySelector('.mute-state').textContent = meetingMuted ? '自动' : muted ? '已静音' : '声音开';
 }
 
 function syncDisplayModeButtons() {
@@ -407,7 +409,12 @@ document.querySelectorAll('.display-modes button[data-display-mode]').forEach((b
   }
 }));
 bindQuickButton('#toggleMute', async () => {
-  const muted = !state?.settings?.muted;
+  const manuallyMuted = Boolean(state?.settings?.manualMuted ?? state?.settings?.muted);
+  if (state?.settings?.meetingMuted && !manuallyMuted) {
+    showMuteToast(true);
+    return;
+  }
+  const muted = !manuallyMuted;
   if (muted) stopVoiceForMute();
   try {
     state = await api.command('settings:mute', { muted });
@@ -481,20 +488,32 @@ async function runTimerCommand(name) {
 document.querySelector('#petTimerPause').onclick = () => runTimerCommand(state?.timer?.status === 'paused' ? 'timer:resume' : 'timer:pause');
 document.querySelector('#petTimerFinish').onclick = () => runTimerCommand(state?.timer?.phase === 'break' ? 'timer:endBreak' : 'timer:complete');
 document.querySelector('#petTimerStop').onclick = () => runTimerCommand('timer:stop');
-document.querySelector('#petHotspot').onpointerdown = (event) => {
+
+function beginDrag(event) {
   if (!menu.classList.contains('hidden') || Date.now() < suppressHotspotTapUntil) return;
+  if (event.target.closest?.('button')) return;
   dragStart = { x: event.screenX, y: event.screenY };
-  event.currentTarget.setPointerCapture(event.pointerId);
-};
-document.querySelector('#petHotspot').onpointermove = (event) => {
+  try { event.currentTarget.setPointerCapture(event.pointerId); } catch {
+    // Synthetic pointer events in browser tests may not own a capturable pointer.
+  }
+}
+
+function continueDrag(event) {
   if (!dragStart) return;
   const delta = { x: event.screenX - dragStart.x, y: event.screenY - dragStart.y };
   api.dragPet(delta);
   dragStart = { x: event.screenX, y: event.screenY };
-};
-document.querySelector('#petHotspot').onpointerup = () => {
+}
+
+function endDrag() {
   dragStart = null;
-};
+}
+
+[document.querySelector('#petHotspot'), petTimer].forEach((target) => {
+  target.onpointerdown = beginDrag;
+  target.onpointermove = continueDrag;
+  target.onpointerup = endDrag;
+});
 
 async function initialize() {
   preloadAnimations();

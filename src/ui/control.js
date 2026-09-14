@@ -19,14 +19,16 @@ const api = window.pomopet || createBrowserBridge();
 const weekdays = ['日', '一', '二', '三', '四', '五', '六'];
 const priorityLabels = { P0: 'P0 重要', P1: 'P1 今天', P2: 'P2 顺手' };
 const supportedIntervals = new Set([15, 30, 45, 60, 90, 120]);
-const sessions = { reminder: null, offwork: null, persona: null, settings: null, todoAdd: null, todo: null };
-const saveEpochs = { reminder: 0, offwork: 0, persona: 0, settings: 0, todoAdd: 0, todo: 0 };
+const sessions = { reminder: null, meeting: null, offwork: null, persona: null, settings: null, todoAdd: null, todo: null };
+const saveEpochs = { reminder: 0, meeting: 0, offwork: 0, persona: 0, settings: 0, todoAdd: 0, todo: 0 };
 const editing = { offwork: false, settings: false };
 const deleteConfirmations = new Map();
+const meetingDeleteConfirmations = new Map();
 const suppressionController = createSuppressionController({ send: (source, active) => api.command('companion:suppress', { source, active }) });
 let state;
 let selectedPreset = '25/5';
 let selectedAlarmId = null;
+let editingMeetingId = null;
 let reminderEditing = false;
 let editingTodoId = null;
 let breakChooserOpen = false;
@@ -46,7 +48,8 @@ function createBrowserBridge() {
     now: Date.now(), timer: { status: 'idle', phase: 'focus', remainingMs: 25 * 60_000, targetAt: null, todayCount: 0, todoId: null }, todos: { items: [], activeId: null }, alarms: [],
     offwork: { enabled: true, workStart: '10:00', time: '18:30', latestTime: '22:30', exclusions: [{ start: '12:00', end: '14:00', label: '午休' }, { start: '18:00', end: '19:00', label: '晚餐' }], weekdays: [1, 2, 3, 4, 5], pose: 'sleepy', blockMode: false, snoozeMinutes: 10, escalateMinutes: 15 },
     persona: { preset: 'gentle', petName: '末末', ownerName: '主人', customPrompt: '', teaseLevel: 35, chatFrequency: 'occasional' },
-    settings: { preset: '25/5', customFocus: 25, customBreak: 5, voiceMode: 'key', volume: .75, interactions: true, companionEnabled: true, launchAtLogin: false, aiCopyEnabled: false, aiKeyConfigured: false, ttsEngine: 'edge', edgeTtsVoice: 'zh-CN-XiaoxiaoNeural', ttsVoiceName: '' },
+    settings: { preset: '25/5', customFocus: 25, customBreak: 5, voiceMode: 'key', muted: false, manualMuted: false, meetingMuted: false, volume: .75, interactions: true, companionEnabled: true, launchAtLogin: false, aiCopyEnabled: false, aiKeyConfigured: false, ttsEngine: 'edge', edgeTtsVoice: 'zh-CN-XiaoxiaoNeural', ttsVoiceName: '' },
+    meetings: { items: [{ id: 'browser-meeting-1', title: '例会', startTime: '10:30', endTime: '11:00', weekdays: [1, 2, 3, 4, 5], enabled: true, autoMute: true, createdAt: Date.now() }] },
     aiStatus: { status: 'builtin', sample: null, errorCode: null, checkedAt: null }
   };
   const listeners = [];
@@ -70,6 +73,10 @@ function createBrowserBridge() {
       if (name === 'alarm:update') { const alarm = demo.alarms.find((item) => item.id === payload.id); if (alarm) Object.assign(alarm, payload.patch); }
       if (name === 'alarm:remove') demo.alarms = demo.alarms.filter((item) => item.id !== payload.id);
       if (name === 'alarm:enabled') { const alarm = demo.alarms.find((item) => item.id === payload.id); if (alarm) alarm.enabled = payload.enabled; }
+      if (name === 'meeting:add') demo.meetings.items.push({ ...payload, id: `browser-meeting-${demo.now}`, createdAt: demo.now });
+      if (name === 'meeting:update') { const meeting = demo.meetings.items.find((item) => item.id === payload.id); if (meeting) Object.assign(meeting, payload.patch); }
+      if (name === 'meeting:remove') demo.meetings.items = demo.meetings.items.filter((item) => item.id !== payload.id);
+      if (name === 'meeting:enabled') { const meeting = demo.meetings.items.find((item) => item.id === payload.id); if (meeting) meeting.enabled = payload.enabled; }
       if (name === 'offwork:update') demo.offwork = { ...demo.offwork, ...payload };
       if (name === 'settings:update') demo.settings = { ...demo.settings, ...payload };
       if (name === 'persona:update') demo.persona = { ...demo.persona, ...payload };
@@ -97,6 +104,8 @@ const settingsDraft = (settings = {}) => ({ voiceMode: settings.voiceMode || 'ke
 const offworkDraft = (offwork = {}) => ({ enabled: Boolean(offwork.enabled), workStart: offwork.workStart || '10:00', time: offwork.time || '18:30', latestTime: offwork.latestTime || '22:30', exclusions: structuredClone(offwork.exclusions || [{ start: '12:00', end: '14:00', label: '午休' }, { start: '18:00', end: '19:00', label: '晚餐' }]), weekdays: [...(offwork.weekdays || [1, 2, 3, 4, 5])], pose: offwork.pose || 'sleepy', blockMode: Boolean(offwork.blockMode), snoozeMinutes: Number(offwork.snoozeMinutes || 10), escalateMinutes: Number(offwork.escalateMinutes || 15) });
 const blankReminder = () => ({ id: null, label: '', type: 'once', at: Date.now() + 3_600_000, time: '09:00', weekdays: [1, 2, 3, 4, 5], startTime: '09:30', endTime: '18:30', intervalMinutes: 30, pose: 'annoyed', enabled: true });
 const reminderDraft = (alarm) => ({ ...blankReminder(), ...structuredClone(alarm || {}), weekdays: [...(alarm?.weekdays || [1, 2, 3, 4, 5])], pose: alarm?.pose === 'alarm' ? 'annoyed' : (alarm?.pose || 'annoyed') });
+const blankMeeting = () => ({ id: null, title: '', startTime: '10:00', endTime: '11:00', weekdays: [1, 2, 3, 4, 5], enabled: true, autoMute: true });
+const meetingDraft = (meeting) => ({ ...blankMeeting(), ...structuredClone(meeting || {}), weekdays: [...(meeting?.weekdays || [1, 2, 3, 4, 5])] });
 const todoDraft = (todo) => ({ id: todo.id, title: todo.title, priority: todo.priority || 'P1', estimatePomos: Number(todo.estimatePomos || 1) });
 const blankTodoAdd = (choices = {}) => ({ title: '', priority: choices.priority || 'P1', estimatePomos: Number(choices.estimatePomos || 1) });
 
@@ -147,6 +156,7 @@ function resetAllDrafts() {
     saveEpochs[name] += 1;
     if (sessions[name]) sessions[name] = cancelDraft(sessions[name]);
   }
+  editingMeetingId = null;
   editingTodoId = null;
   sessions.todo = null;
   reminderEditing = false;
@@ -183,6 +193,7 @@ function initializeSessions(next) {
   sessions.offwork = sessions.offwork ? syncDraftSaved(sessions.offwork, offworkDraft(next.offwork)) : createDraftSession(offworkDraft(next.offwork));
   sessions.persona = sessions.persona ? syncDraftSaved(sessions.persona, personaDraft(next.persona, next.settings)) : createDraftSession(personaDraft(next.persona, next.settings));
   sessions.settings = sessions.settings ? syncDraftSaved(sessions.settings, settingsDraft(next.settings)) : createDraftSession(settingsDraft(next.settings));
+  if (!sessions.meeting) sessions.meeting = createDraftSession(blankMeeting());
   if (!sessions.todoAdd) sessions.todoAdd = createDraftSession(blankTodoAdd());
   if (!sessions.reminder) sessions.reminder = createDraftSession(blankReminder());
 }
@@ -192,6 +203,7 @@ function render(next) {
   state = next;
   state.todos ||= { items: [], activeId: null };
   state.alarms ||= [];
+  state.meetings ||= { items: [] };
   state.settings ||= {};
   state.offwork ||= offworkDraft();
   state.persona ||= defaultPersona();
@@ -219,6 +231,7 @@ function render(next) {
   renderTodoAdd();
   renderTodos();
   renderReminders();
+  renderMeetings();
   renderOffwork();
   renderReview();
   renderPersona();
@@ -275,10 +288,10 @@ function reviewTimeline(day) {
     const timestamp = axisStart + hour * 3_600_000;
     hours.push(`<span style="left:${position(timestamp)}%">${new Date(timestamp).getHours()}</span>`);
   }
-  const kindLabel = { focus: '专注', break: '休息', excluded: '固定休息', unrecorded: '未记录' };
+  const kindLabel = { focus: '专注', meeting: '会议', break: '休息', excluded: '固定休息', unrecorded: '未记录' };
   const segments = (day.timeline || []).map((item) => {
     const left = position(item.startedAt); const right = position(item.endedAt);
-    const label = item.kind === 'focus' ? item.taskTitle || '未命名任务' : kindLabel[item.kind] || '未记录';
+    const label = item.kind === 'focus' ? item.taskTitle || '未命名任务' : item.kind === 'meeting' ? item.label || '会议' : kindLabel[item.kind] || '未记录';
     return `<span class="review-timeline-segment kind-${escapeAttr(item.kind || 'unrecorded')}" style="left:${left}%;width:${Math.max(.7, right - left)}%" title="${escapeAttr(`${clockTime(item.startedAt)}–${clockTime(item.endedAt)} ${label}`)}">${escapeHtml(label)}</span>`;
   }).join('');
   const reminderEvents = day.reminderTimeline?.length
@@ -290,6 +303,21 @@ function reviewTimeline(day) {
     return `<span class="review-reminder-marker" style="left:${position(event.firedAt)}%" title="${escapeAttr(`${clockTime(event.firedAt)} ${reminder}${event.count ? ` ${event.count} 次` : ''}`)}">${marker}</span>`;
   }).join('');
   return `<div class="review-timeline-axis">${hours.join('')}</div><div class="review-timeline-row"><strong>记录状态</strong><div class="review-timeline-track">${segments}</div></div><div class="review-timeline-row"><strong>健康节奏</strong><div class="review-timeline-track health-track">${reminderMarkers}</div></div>`;
+}
+
+function reviewMeetingGantt(day) {
+  const meetings = day.meetingTimeline || [];
+  if (!meetings.length) return '<p class="review-empty">这一天没有会议时间块。</p>';
+  const rawStart = Number(day.rangeStartAt); const rawEnd = Number(day.rangeEndAt);
+  if (!Number.isFinite(rawStart) || !Number.isFinite(rawEnd) || rawEnd <= rawStart) return '<p class="review-empty">会议时间还没有可绘制范围。</p>';
+  const axisStartDate = new Date(rawStart); axisStartDate.setMinutes(0, 0, 0);
+  const axisEndDate = new Date(rawEnd); axisEndDate.setMinutes(0, 0, 0); if (axisEndDate.getTime() < rawEnd) axisEndDate.setHours(axisEndDate.getHours() + 1);
+  const axisStart = axisStartDate.getTime(); const axisEnd = Math.max(axisStart + 3_600_000, axisEndDate.getTime()); const span = axisEnd - axisStart;
+  const position = (timestamp) => Math.max(0, Math.min(100, (Number(timestamp) - axisStart) / span * 100));
+  return `<div class="meeting-gantt">${meetings.map((meeting) => {
+    const left = position(meeting.startedAt); const right = position(meeting.endedAt);
+    return `<div class="meeting-gantt-row"><strong title="${escapeAttr(meeting.label || '会议')}">${escapeHtml(meeting.label || '会议')}</strong><div><span style="left:${left}%;width:${Math.max(.9, right - left)}%" title="${escapeAttr(`${clockTime(meeting.startedAt)}–${clockTime(meeting.endedAt)} ${meeting.label || '会议'}`)}">${clockTime(meeting.startedAt)}–${clockTime(meeting.endedAt)}</span></div></div>`;
+  }).join('')}</div>`;
 }
 
 function reviewSuggestions(day) {
@@ -313,13 +341,16 @@ function renderReview() {
   $('#reviewDateSelect').onchange = (event) => { selectedReviewDate = event.target.value; renderReview(); };
   const day = days.find((item) => item.date === selectedReviewDate);
   if (!day) {
-    $('#reviewSelectedDate').textContent = '时间花在哪里'; $('#reviewSummary').replaceChildren(); $('#reviewTimeline').innerHTML = '<p class="review-empty">开始一颗番茄后，这里会出现你的时间足迹。</p>'; $('#reviewTasks').replaceChildren(); $('#reviewInsights').replaceChildren(); $('#reviewReminderTotals').replaceChildren(); return;
+    $('#reviewSelectedDate').textContent = '时间花在哪里'; $('#reviewSummary').replaceChildren(); $('#reviewTimeline').innerHTML = '<p class="review-empty">开始一颗番茄后，这里会出现你的时间足迹。</p>'; $('#reviewMeetingGantt').replaceChildren(); $('#reviewTasks').replaceChildren(); $('#reviewInsights').replaceChildren(); $('#reviewReminderTotals').replaceChildren(); return;
   }
   const index = days.indexOf(day); const finalTime = day.actualOffworkAt ? clockTime(day.actualOffworkAt) : '尚未收工';
   $('#reviewSelectedDate').textContent = `${shortDate(day.date, index)} · 时间花在哪里`;
-  $('#reviewSummary').innerHTML = `<div><span>有效专注</span><strong>${compactDuration(day.totals?.focusMs)}</strong><small>${day.counts?.natural || 0} 颗自然完成</small></div><div><span>休息与恢复</span><strong>${compactDuration(day.totals?.breakMs)}</strong><small>${day.restTimeWorkMs ? `休息时段工作 ${compactDuration(day.restTimeWorkMs)}` : '节奏由你主动记录'}</small></div><div><span>最终收工</span><strong>${finalTime}</strong><small>${day.extensionCount ? `延长 ${day.extensionCount} 次` : '没有继续延长'}</small></div><div><span>未记录空档</span><strong>${compactDuration(day.totals?.unrecordedMs)}</strong><small>不用记录所有琐事</small></div>`;
+  const scheduledMeetingMs = Number(day.totals?.scheduledMeetingMs) || 0;
+  const overlappedMeetingMs = Math.max(0, scheduledMeetingMs - (Number(day.totals?.meetingMs) || 0));
+  $('#reviewSummary').innerHTML = `<div><span>有效专注</span><strong>${compactDuration(day.totals?.focusMs)}</strong><small>${day.counts?.natural || 0} 颗自然完成</small></div><div><span>会议占用</span><strong>${compactDuration(day.totals?.meetingMs)}</strong><small>${overlappedMeetingMs ? `重叠专注 ${compactDuration(overlappedMeetingMs)}` : '无专注重叠'}</small></div><div><span>休息与恢复</span><strong>${compactDuration(day.totals?.breakMs)}</strong><small>${day.restTimeWorkMs ? `休息时段工作 ${compactDuration(day.restTimeWorkMs)}` : '节奏由你主动记录'}</small></div><div><span>最终收工</span><strong>${finalTime}</strong><small>${day.extensionCount ? `延长 ${day.extensionCount} 次` : '没有继续延长'}</small></div><div><span>未记录空档</span><strong>${compactDuration(day.totals?.unrecordedMs)}</strong><small>不用记录所有琐事</small></div>`;
   $('#reviewRangeLabel').textContent = `${clockTime(day.rangeStartAt)}–${clockTime(day.rangeEndAt)}`;
   $('#reviewTimeline').innerHTML = reviewTimeline(day);
+  $('#reviewMeetingGantt').innerHTML = reviewMeetingGantt(day);
   $('#reviewReminderTotals').innerHTML = (day.reminders || []).map((item) => `<span>${escapeHtml(item.text)} <b>${item.count}</b> 次</span>`).join('') || '<span>暂无健康提醒</span>';
   const tasks = day.tasks || []; const maximum = Math.max(1, ...tasks.map((task) => task.ms || 0));
   $('#reviewTasks').innerHTML = tasks.map((task, taskIndex) => `<div class="review-task-row"><span title="${escapeAttr(task.title)}">${escapeHtml(task.title)}</span><div><i style="width:${Math.max(3, Math.round((task.ms || 0) / maximum * 100))}%;--task-color:var(--review-task-${taskIndex % 4})"></i></div><b>${compactDuration(task.ms)}</b></div>`).join('') || '<p class="review-empty">这一天暂无专注任务。</p>';
@@ -568,6 +599,95 @@ function alarmPayload(draft) {
   return { label: draft.label.trim(), type: draft.type, pose: draft.pose, at: draft.type === 'once' ? draft.at : null, time: draft.type === 'weekly' ? draft.time : null, weekdays: draft.type === 'once' ? [] : [...draft.weekdays], startTime: draft.type === 'interval' ? draft.startTime : null, endTime: draft.type === 'interval' ? draft.endTime : null, intervalMinutes: draft.type === 'interval' ? Number(draft.intervalMinutes) : null };
 }
 
+function meetingRule(meeting) {
+  const days = meeting.weekdays?.length === 5 && [1, 2, 3, 4, 5].every((day) => meeting.weekdays.includes(day))
+    ? '工作日'
+    : (meeting.weekdays || []).map((day) => `周${weekdays[day]}`).join('、');
+  return `${days || '未选择日期'} · ${meeting.startTime}–${meeting.endTime}`;
+}
+
+function renderMeetingDays(selected) {
+  const root = $('#meetingDays');
+  root.innerHTML = weekdays.map((label, day) => `<button type="button" data-day="${day}" class="${selected.includes(day) ? 'on' : ''}" aria-pressed="${selected.includes(day)}">${label}</button>`).join('');
+  root.querySelectorAll('button').forEach((button) => {
+    button.disabled = sessions.meeting.saving;
+    button.onclick = () => {
+      const day = Number(button.dataset.day);
+      const days = sessions.meeting.draft.weekdays;
+      editSession('meeting', { weekdays: days.includes(day) ? days.filter((item) => item !== day) : [...days, day].sort() });
+      renderMeetingEditor();
+    };
+  });
+}
+
+function renderMeetings() {
+  const items = state.meetings?.items || [];
+  $('#meetingCount').textContent = `${items.filter((meeting) => meeting.enabled).length} 个会议时间块`;
+  $('#meetingList').innerHTML = items.length ? items.map((meeting) => {
+    const confirming = (meetingDeleteConfirmations.get(meeting.id) || 0) > Date.now();
+    return `<article class="meeting-item ${meeting.id === editingMeetingId ? 'selected' : ''}" data-id="${escapeAttr(meeting.id)}"><div class="meeting-clock"><strong>${escapeHtml(meeting.startTime)}</strong><span>${escapeHtml(meeting.endTime)}</span></div><div class="meeting-meta"><strong>${escapeHtml(meeting.title)}</strong><small>${escapeHtml(meetingRule(meeting))}</small><span>${meeting.autoMute ? '会议期间自动静音' : '只记录时间分布'}</span></div><label class="alarm-status"><input class="meeting-enabled" type="checkbox" ${meeting.enabled ? 'checked' : ''} aria-label="${meeting.enabled ? '停用' : '启用'} ${escapeAttr(meeting.title)}"><span>${meeting.enabled ? '运行中' : '已暂停'}</span></label><div class="alarm-tools"><button class="meeting-edit" type="button" aria-label="编辑 ${escapeAttr(meeting.title)}" title="编辑">✎</button><button class="meeting-delete" type="button" aria-label="删除 ${escapeAttr(meeting.title)}" title="${confirming ? '再次点击确认删除' : '删除'}" data-confirming="${confirming}">${confirming ? '删' : '×'}</button></div></article>`;
+  }).join('') : '<div class="empty">还没有会议时间块。添加后，时间回顾会显示会议分布。</div>';
+  $$('#meetingList .meeting-item').forEach((row) => {
+    const meeting = items.find((item) => item.id === row.dataset.id);
+    row.querySelector('.meeting-edit').onclick = () => openMeeting(meeting);
+    row.querySelector('.meeting-enabled').onchange = async (event) => { if (!confirmDiscard()) { event.target.checked = meeting.enabled; return; } await command('meeting:enabled', { id: meeting.id, enabled: event.target.checked }); };
+    row.querySelector('.meeting-delete').onclick = async () => {
+      if (!confirmDiscard()) return;
+      const expiresAt = meetingDeleteConfirmations.get(meeting.id) || 0;
+      if (expiresAt <= Date.now()) {
+        meetingDeleteConfirmations.set(meeting.id, Date.now() + 2_200);
+        renderMeetings();
+        setTimeout(() => { if ((meetingDeleteConfirmations.get(meeting.id) || 0) <= Date.now()) { meetingDeleteConfirmations.delete(meeting.id); renderMeetings(); } }, 2_220);
+        return;
+      }
+      meetingDeleteConfirmations.delete(meeting.id);
+      await command('meeting:remove', { id: meeting.id });
+      if (editingMeetingId === meeting.id) openMeeting();
+    };
+  });
+  renderMeetingEditor();
+}
+
+function renderMeetingEditor() {
+  const session = sessions.meeting;
+  const draft = session.draft;
+  $('#meetingEditorTitle').textContent = draft.id ? `编辑${draft.title || '会议'}` : '新建会议';
+  $('#meetingDraftState').textContent = session.saving ? '保存中…' : session.dirty ? '有未保存修改' : '草稿受保护';
+  $('#meetingTitle').value = draft.title;
+  $('#meetingStartTime').value = draft.startTime;
+  $('#meetingEndTime').value = draft.endTime;
+  $('#meetingEnabled').checked = draft.enabled;
+  $('#meetingAutoMute').checked = draft.autoMute;
+  renderMeetingDays(draft.weekdays);
+  $('#meetingPreview').innerHTML = `<strong>会议分布</strong><br>${escapeHtml(meetingRule(draft))}${draft.autoMute ? '，进入该时段后自动静音。' : '，仅用于时间回顾。'}`;
+  $('#meetingError').textContent = session.error || '';
+  $('#meetingForm').setAttribute('aria-busy', String(session.saving));
+  $('#meetingForm').classList.toggle('is-saving', session.saving);
+  $$('#meetingForm input, #meetingForm button').forEach((control) => { control.disabled = Boolean(session.saving); });
+}
+
+function openMeeting(meeting = null) {
+  if (!confirmDiscard()) return;
+  editingMeetingId = meeting?.id || null;
+  sessions.meeting = createDraftSession(meetingDraft(meeting));
+  reportDirty();
+  syncEditingSuppression();
+  renderMeetings();
+  $('#meetingTitle').focus();
+}
+
+function validateMeeting(draft) {
+  if (!draft.title.trim()) return '请输入会议名称';
+  if (!draft.weekdays.length) return '请至少选择一天';
+  if (!validTime(draft.startTime) || !validTime(draft.endTime)) return '请补全会议时间';
+  if (draft.startTime >= draft.endTime) return '会议开始时间要早于结束时间';
+  return null;
+}
+
+function meetingPayload(draft) {
+  return { title: draft.title.trim(), startTime: draft.startTime, endTime: draft.endTime, weekdays: [...draft.weekdays], enabled: draft.enabled, autoMute: draft.autoMute };
+}
+
 function renderOffwork() {
   const draft = sessions.offwork.draft;
   const exclusions = draft.exclusions || [];
@@ -641,7 +761,7 @@ function setPanelEditing(panel, enabled) {
 
 function startEditing(panel) { editing[panel] = true; if (panel === 'offwork') renderOffwork(); else renderSettings(); syncEditingSuppression(); }
 function cancelEditing(panel) { sessions[panel] = cancelDraft(sessions[panel]); editing[panel] = false; reportDirty(); if (panel === 'offwork') renderOffwork(); else renderSettings(); }
-function syncEditingSuppression() { void suppressionController.setDesired('editing', Boolean(editing.offwork || editing.settings || editingTodoId || reminderEditing || sessions.persona?.dirty)); }
+function syncEditingSuppression() { void suppressionController.setDesired('editing', Boolean(editing.offwork || editing.settings || editingTodoId || editingMeetingId || reminderEditing || sessions.persona?.dirty)); }
 function isTypingControl(element) { const nonTyping = ['button', 'checkbox', 'color', 'file', 'radio', 'range', 'reset', 'submit']; return element instanceof HTMLInputElement && !nonTyping.includes(element.type) || element?.tagName === 'TEXTAREA' || element instanceof HTMLElement && element.isContentEditable; }
 
 $('#alarmPose').innerHTML = PET_POSES.map(({ value, label }) => `<option value="${value}">${label}</option>`).join('');
@@ -769,6 +889,33 @@ $('#alarmForm').onsubmit = async (event) => {
   const commandPayload = draft.id ? { id: draft.id, patch: payload } : { ...payload, enabled: true };
   try { const next = await sendCommand(draft.id ? 'alarm:update' : 'alarm:add', commandPayload); if (!isCurrentSave('reminder', epoch)) return; sessions.reminder = draftSaveSucceeded(sessions.reminder, { ...draft, ...payload, enabled: draft.id ? draft.enabled : true }); reminderEditing = false; reportDirty(); render(next); }
   catch { if (!isCurrentSave('reminder', epoch)) return; setSession('reminder', draftSaveFailed(sessions.reminder, '保存失败，请重试')); renderReminderEditor(); }
+};
+
+$('#newMeeting').onclick = () => openMeeting();
+$('#meetingTitle').oninput = (event) => { editSession('meeting', { title: event.target.value }); $('#meetingDraftState').textContent = '有未保存修改'; };
+$('#meetingStartTime').oninput = (event) => { editSession('meeting', { startTime: event.target.value }); renderMeetingEditor(); };
+$('#meetingEndTime').oninput = (event) => { editSession('meeting', { endTime: event.target.value }); renderMeetingEditor(); };
+$('#meetingEnabled').oninput = (event) => { editSession('meeting', { enabled: event.target.checked }); renderMeetingEditor(); };
+$('#meetingAutoMute').oninput = (event) => { editSession('meeting', { autoMute: event.target.checked }); renderMeetingEditor(); };
+$('#cancelMeeting').onclick = () => { editingMeetingId = null; setSession('meeting', cancelDraft(sessions.meeting)); renderMeetingEditor(); syncEditingSuppression(); };
+$('#meetingForm').onsubmit = async (event) => {
+  event.preventDefault();
+  const error = validateMeeting(sessions.meeting.draft);
+  if (error) { setSession('meeting', draftSaveFailed(sessions.meeting, error)); renderMeetingEditor(); return; }
+  const epoch = startSessionSave('meeting'); if (epoch == null) return; renderMeetingEditor();
+  const draft = sessions.meeting.draft; const payload = meetingPayload(draft);
+  try {
+    const next = await sendCommand(draft.id ? 'meeting:update' : 'meeting:add', draft.id ? { id: draft.id, patch: payload } : payload);
+    if (!isCurrentSave('meeting', epoch)) return;
+    sessions.meeting = draftSaveSucceeded(sessions.meeting, { ...draft, ...payload });
+    editingMeetingId = null;
+    reportDirty();
+    render(next);
+  } catch {
+    if (!isCurrentSave('meeting', epoch)) return;
+    setSession('meeting', draftSaveFailed(sessions.meeting, '保存失败，请重试'));
+    renderMeetingEditor();
+  }
 };
 
 $('#editOffwork').onclick = () => startEditing('offwork'); $('#cancelOffwork').onclick = () => cancelEditing('offwork');

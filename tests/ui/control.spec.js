@@ -5,7 +5,7 @@ test('control surface renders and completes browser fallback timer flow', async 
   await page.goto('/'); await expect(page.getByRole('heading', { name: '认真工作，也要好好生活。' })).toBeVisible();
   expect(await page.locator('.window-drag-strip').evaluate((node) => globalThis.getComputedStyle(node).webkitAppRegion)).toBe('drag');
   const dragStripBox = await page.locator('.window-drag-strip').boundingBox();
-  expect(dragStripBox.height).toBeGreaterThanOrEqual(200);
+  expect(dragStripBox.height).toBeLessThanOrEqual(80);
   expect(dragStripBox.x).toBeGreaterThanOrEqual(70);
   expect(await page.locator('.masthead').evaluate((node) => globalThis.getComputedStyle(node).webkitAppRegion)).toBe('drag');
   expect(await page.getByRole('heading', { name: '认真工作，也要好好生活。' }).evaluate((node) => globalThis.getComputedStyle(node).webkitAppRegion)).toBe('drag');
@@ -474,6 +474,75 @@ test('settings show AI status, test copy, and keep the API key write-only', asyn
   expect(await page.evaluate(() => globalThis.__keys)).toEqual(['new-local-key']); await expect(page.locator('#aiApiKey')).toHaveValue(''); await expect(page.locator('#aiTone')).toHaveCount(0);
 });
 
+test('meeting calendar saves weekly blocks with auto mute settings', async ({ page }) => {
+  await page.addInitScript(() => {
+    const state = {
+      now: Date.now(),
+      timer: { status: 'idle', phase: 'focus', remainingMs: 25 * 60_000, targetAt: null, todayCount: 0 },
+      todos: { items: [], activeId: null },
+      alarms: [],
+      meetings: { items: [] },
+      review: { days: [] },
+      offwork: { enabled: false, time: '18:30', weekdays: [] },
+      persona: { preset: 'gentle', petName: '末末', ownerName: '主人', customPrompt: '', teaseLevel: 35, chatFrequency: 'occasional' },
+      settings: { preset: '25/5', voiceMode: 'off', volume: .5, ttsEngine: 'system', aiCopyEnabled: false, aiKeyConfigured: false, companionEnabled: true, launchAtLogin: false },
+      aiStatus: { status: 'builtin' }
+    };
+    const listeners = []; const commands = []; const copy = (value) => JSON.parse(JSON.stringify(value));
+    globalThis.__meetingCommands = commands;
+    const emit = () => listeners.forEach((callback) => callback(copy(state)));
+    globalThis.pomopet = {
+      getState: async () => copy(state),
+      onState: (callback) => { listeners.push(callback); return () => {}; },
+      command: async (name, payload) => {
+        commands.push({ name, payload });
+        if (name === 'meeting:add') state.meetings.items.push({ ...payload, id: 'meeting-1', createdAt: state.now });
+        if (name === 'meeting:update') state.meetings.items = state.meetings.items.map((item) => item.id === payload.id ? { ...item, ...payload.patch } : item);
+        if (name === 'meeting:enabled') state.meetings.items = state.meetings.items.map((item) => item.id === payload.id ? { ...item, enabled: payload.enabled } : item);
+        emit();
+        return copy(state);
+      },
+      setDirty: () => {}, onDiscardDrafts: () => () => {}, showControl: () => {}
+    };
+  });
+
+  await page.goto('/');
+  await page.getByRole('tab', { name: '会议日历' }).click();
+  await page.getByRole('button', { name: '新建会议' }).click();
+  await page.locator('#meetingTitle').fill('需求评审');
+  await page.locator('#meetingStartTime').fill('10:30');
+  await page.locator('#meetingEndTime').fill('11:15');
+  await page.locator('#meetingAutoMute').check();
+  await page.getByRole('button', { name: '保存会议' }).click();
+
+  await expect(page.locator('.meeting-item')).toContainText('需求评审');
+  await expect(page.locator('.meeting-item')).toContainText('会议期间自动静音');
+  expect(await page.evaluate(() => globalThis.__meetingCommands.filter((item) => item.name === 'meeting:add').at(-1))).toEqual({
+    name: 'meeting:add',
+    payload: { title: '需求评审', startTime: '10:30', endTime: '11:15', weekdays: [1, 2, 3, 4, 5], enabled: true, autoMute: true }
+  });
+
+  await page.locator('.meeting-enabled').uncheck();
+  await expect.poll(() => page.evaluate(() => globalThis.__meetingCommands.filter((item) => item.name === 'meeting:enabled').at(-1))).toEqual({ name: 'meeting:enabled', payload: { id: 'meeting-1', enabled: false } });
+});
+
+test('meeting controls receive pointer hits above the window drag strip', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('tab', { name: '会议日历' }).click();
+  for (const selector of ['#newMeeting', '#cancelMeeting', '#saveMeeting']) {
+    const control = page.locator(selector);
+    await control.scrollIntoViewIfNeeded();
+    const hit = await control.evaluate((node) => {
+      const box = node.getBoundingClientRect();
+      const target = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+      const button = target?.closest('button');
+      const style = globalThis.getComputedStyle(node);
+      return { id: button?.id || target?.id || '', cursor: style.cursor, appRegion: style.webkitAppRegion };
+    });
+    expect(hit).toEqual({ id: selector.slice(1), cursor: 'pointer', appRegion: 'no-drag' });
+  }
+});
+
 test('dirty tab switching and renderer discard callback protect every active draft', async ({ page }) => {
   await page.addInitScript(() => {
     const state = { now: Date.now(), timer: { status: 'idle', phase: 'focus', remainingMs: 1 }, todos: { items: [], activeId: null }, alarms: [], offwork: { enabled: false, time: '18:30', weekdays: [1, 2, 3, 4, 5], pose: 'sleepy', blockMode: false, snoozeMinutes: 15, escalateMinutes: 15 }, persona: { preset: 'gentle', petName: '末末', ownerName: '主人', customPrompt: '', teaseLevel: 35, chatFrequency: 'occasional' }, settings: { preset: '25/5', voiceMode: 'off', volume: .5, ttsEngine: 'system', aiCopyEnabled: false, aiKeyConfigured: false, companionEnabled: true, launchAtLogin: false }, aiStatus: { status: 'builtin' } };
@@ -934,7 +1003,7 @@ test('time review matches the full-width daily report prototype with date naviga
     const days = Array.from({ length: 7 }, (_, index) => ({
       date: new Date(now - index * 86_400_000).toISOString().slice(0, 10),
       rangeStartAt: now - index * 86_400_000 - 10 * 3_600_000, rangeEndAt: now - index * 86_400_000,
-      totals: { focusMs: index === 0 ? 5 * 3_600_000 + 20 * 60_000 : (index + 1) * 30 * 60_000, breakMs: 65 * 60_000, excludedMs: 3 * 3_600_000, unrecordedMs: 42 * 60_000, pausedMs: 0, unplacedMs: 0 },
+      totals: { focusMs: index === 0 ? 5 * 3_600_000 + 20 * 60_000 : (index + 1) * 30 * 60_000, meetingMs: index === 0 ? 45 * 60_000 : 0, scheduledMeetingMs: index === 0 ? 60 * 60_000 : 0, breakMs: 65 * 60_000, excludedMs: 3 * 3_600_000, unrecordedMs: 42 * 60_000, pausedMs: 0, unplacedMs: 0 },
       tasks: index === 0
         ? [{ key: 'product', title: '产品设计', ms: 148 * 60_000 }, { key: 'code', title: '代码实现', ms: 105 * 60_000 }]
         : [{ key: `history-${index}`, title: `历史任务 ${index}`, ms: 30 * 60_000 }],
@@ -944,8 +1013,12 @@ test('time review matches the full-width daily report prototype with date naviga
     days[0].timeline = [
       { startedAt: days[0].rangeStartAt, endedAt: days[0].rangeStartAt + 2 * 3_600_000, kind: 'focus', todoId: 'product', taskTitle: '产品设计' },
       { startedAt: days[0].rangeStartAt + 2 * 3_600_000, endedAt: days[0].rangeStartAt + 4 * 3_600_000, kind: 'excluded', todoId: null, taskTitle: '' },
+      { startedAt: days[0].rangeStartAt + 4 * 3_600_000, endedAt: days[0].rangeStartAt + 4.75 * 3_600_000, kind: 'meeting', label: '需求评审', todoId: null, taskTitle: '' },
       { startedAt: days[0].rangeStartAt + 4 * 3_600_000, endedAt: days[0].rangeStartAt + 5.75 * 3_600_000, kind: 'focus', todoId: 'code', taskTitle: '代码实现' },
       { startedAt: days[0].rangeStartAt + 5.75 * 3_600_000, endedAt: days[0].rangeStartAt + 6.25 * 3_600_000, kind: 'break', todoId: null, taskTitle: '' }
+    ];
+    days[0].meetingTimeline = [
+      { id: 'meeting:review', label: '需求评审', startedAt: days[0].rangeStartAt + 4 * 3_600_000, endedAt: days[0].rangeStartAt + 5 * 3_600_000 }
     ];
     days[0].reminderTimeline = [
       { occurrenceId: 'water', text: '起来喝水', firedAt: new Date(`${days[0].date}T10:30:00`).getTime() },
@@ -964,7 +1037,11 @@ test('time review matches the full-width daily report prototype with date naviga
   await expect(page.locator('#reviewDateSelect option')).toHaveCount(7);
   await expect(page.locator('#reviewDateSelect')).toBeVisible();
   await expect(page.locator('#reviewSelectedDate')).toContainText('时间花在哪里');
-  await expect(page.locator('#reviewTimeline .review-timeline-segment')).toHaveCount(4);
+  await expect(page.locator('#reviewTimeline .review-timeline-segment')).toHaveCount(5);
+  await expect(page.locator('#reviewTimeline')).toContainText('需求评审');
+  await expect(page.locator('#reviewMeetingGantt')).toContainText('需求评审');
+  await expect(page.locator('#reviewSummary')).toContainText('会议占用');
+  await expect(page.locator('#reviewSummary')).toContainText('重叠专注');
   expect(await page.locator('#reviewTimeline .review-reminder-marker').allTextContents()).toEqual(['水', '动']);
   await expect(page.locator('#reviewTasks .review-task-row')).toHaveCount(2);
   await expect(page.locator('#reviewTasks')).toContainText('产品设计');
@@ -1068,6 +1145,45 @@ test('pet stays anchored while idle until the user drags it', async ({ page }) =
   await page.goto('/pet.html');
   await page.clock.fastForward(20_000);
   expect(await page.evaluate(() => globalThis.__pomopetDrags)).toEqual([]);
+});
+
+test('timer-only pet panel can be dragged without stealing control clicks', async ({ page }) => {
+  await page.addInitScript(() => {
+    const now = Date.now();
+    const state = {
+      now,
+      timer: { status: 'running', phase: 'focus', task: '整理会议纪要', focusMs: 25 * 60_000, breakMs: 5 * 60_000, remainingMs: 25 * 60_000, targetAt: now + 25 * 60_000 },
+      pet: { displayMode: 'timer' },
+      settings: { voiceMode: 'off', volume: 0.75, interactions: true }
+    };
+    const drags = []; const commands = [];
+    globalThis.__timerOnlyDrags = drags;
+    globalThis.__timerOnlyCommands = commands;
+    globalThis.pomopet = {
+      getState: async () => state,
+      onState: (callback) => { callback(state); return () => {}; },
+      onPresentation: () => {},
+      command: async (name, payload) => { commands.push({ name, payload }); return state; },
+      synthesizeSpeech: async () => null,
+      setPetSpeaking: () => {}, showControl: () => {}, hidePet: () => {},
+      dragPet: (delta) => drags.push(delta)
+    };
+  });
+
+  await page.setViewportSize({ width: 300, height: 126 });
+  await page.goto('/pet.html');
+  await expect(page.locator('#petHotspot')).toBeHidden();
+  await expect(page.locator('#petTimer')).toBeVisible();
+  await page.locator('#petTimer').dispatchEvent('pointerdown', { button: 0, pointerId: 1, pointerType: 'mouse', screenX: 100, screenY: 70 });
+  await page.locator('#petTimer').dispatchEvent('pointermove', { button: 0, pointerId: 1, pointerType: 'mouse', screenX: 128, screenY: 83 });
+  await page.locator('#petTimer').dispatchEvent('pointerup', { button: 0, pointerId: 1, pointerType: 'mouse' });
+  expect(await page.evaluate(() => globalThis.__timerOnlyDrags)).toEqual([{ x: 28, y: 13 }]);
+
+  await page.locator('#petTimerPause').dispatchEvent('pointerdown', { button: 0, pointerId: 2, pointerType: 'mouse', screenX: 120, screenY: 98 });
+  await page.locator('#petTimerPause').dispatchEvent('pointermove', { button: 0, pointerId: 2, pointerType: 'mouse', screenX: 150, screenY: 115 });
+  await page.locator('#petTimerPause').click();
+  expect(await page.evaluate(() => globalThis.__timerOnlyDrags)).toEqual([{ x: 28, y: 13 }]);
+  expect(await page.evaluate(() => globalThis.__timerOnlyCommands.at(-1))).toEqual({ name: 'timer:pause', payload: undefined });
 });
 
 test('pet menu toggles mute while keeping reminder copy visible', async ({ page }) => {

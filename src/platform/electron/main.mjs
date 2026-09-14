@@ -9,6 +9,8 @@ import { createBlockerSuppression } from './blocker-suppression.mjs';
 import { createAiKeyHandler, createIpcAuthorizer } from './ipc-security.mjs';
 import { createPresentationRouter, sendPresentationWhenReady, showPresentationNotification } from './presentation-routing.mjs';
 import { resolveControlClose } from './control-close.mjs';
+import { resizePetBounds } from './pet-window-bounds.mjs';
+import { clampToArea, normalizeWindowBounds, virtualWorkArea } from './window-bounds.mjs';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
 let controlWindow; let petWindow; let blockWindow; let tray; let runtime; let edgeTts; let quitting = false; let controlDirty = false; let closePromptOpen = false;
@@ -53,16 +55,17 @@ function send(channel, value) {
 
 function clampPosition(bounds = {}) {
   const primary = screen.getPrimaryDisplay().workArea;
-  const width = Number.isFinite(Number(bounds.width)) && Number(bounds.width) > 0 ? Number(bounds.width) : PET_WIDTH;
-  const height = Number.isFinite(Number(bounds.height)) && Number(bounds.height) > 0 ? Number(bounds.height) : PET_HEIGHT;
-  const x = Number.isFinite(Number(bounds.x)) ? Number(bounds.x) : primary.x + primary.width - width;
-  const y = Number.isFinite(Number(bounds.y)) ? Number(bounds.y) : primary.y + primary.height - height;
-  const normalized = { x, y, width, height };
+  const fallback = { x: primary.x + primary.width - PET_WIDTH, y: primary.y + primary.height - PET_HEIGHT, width: PET_WIDTH, height: PET_HEIGHT };
+  const normalized = normalizeWindowBounds(bounds, fallback);
   const display = screen.getDisplayMatching(normalized).workArea;
-  return {
-    x: Math.min(Math.max(x, display.x), display.x + display.width - width),
-    y: Math.min(Math.max(y, display.y), display.y + display.height - height)
-  };
+  return clampToArea(normalized, display);
+}
+
+function clampDraggedPosition(bounds = {}) {
+  const primary = screen.getPrimaryDisplay().workArea;
+  const fallback = { x: primary.x + primary.width - PET_WIDTH, y: primary.y + primary.height - PET_HEIGHT, width: PET_WIDTH, height: PET_HEIGHT };
+  const normalized = normalizeWindowBounds(bounds, fallback);
+  return clampToArea(normalized, virtualWorkArea(screen.getAllDisplays()) || primary);
 }
 
 function recallPet({ recreate = false } = {}) {
@@ -94,10 +97,7 @@ function resizePetWindow(requestedHeight = PET_HEIGHT, minimumHeight = PET_TIMER
   if (!petWindow || petWindow.isDestroyed()) return;
   const bounds = petWindow.getBounds();
   const display = screen.getDisplayMatching(bounds).workArea;
-  const height = Math.min(480, Math.max(minimumHeight, Math.round(requestedHeight)));
-  const bottom = bounds.y + bounds.height;
-  const y = Math.max(display.y, bottom - height);
-  petWindow.setBounds({ x: bounds.x, y, width: PET_WIDTH, height: bottom - y }, false);
+  petWindow.setBounds(resizePetBounds(bounds, display, requestedHeight, minimumHeight, PET_WIDTH), false);
 }
 
 function applyPetDisplayMode({ recreate = false } = {}) {
@@ -308,6 +308,6 @@ ipcMain.handle('pet:set-speaking', (event, payload = {}) => {
 });
 ipcMain.on('drag-pet', (event, delta) => {
   ipcAuthorizer.authorizeChannel(event, 'drag-pet');
-  const bounds = petWindow.getBounds(); const next = clampPosition({ x: bounds.x + delta.x, y: bounds.y + delta.y, width: bounds.width, height: bounds.height });
+  const bounds = petWindow.getBounds(); const next = clampDraggedPosition({ x: bounds.x + delta.x, y: bounds.y + delta.y, width: bounds.width, height: bounds.height });
   petWindow.setPosition(Math.round(next.x), Math.round(next.y));
 });

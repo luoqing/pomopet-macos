@@ -14,11 +14,60 @@ import { reviewRecentDays } from '../../core/time-review.js';
 const defaults = {
   timer: createTimerState(), todos: createTodoState(), alarms: [], ledger: {}, analytics: createActivityState(), copyLast: {}, offwork: defaultOffwork(),
   settings: { preset: '25/5', customFocus: 25, customBreak: 5, voiceMode: 'key', muted: false, volume: 0.75, interactions: true, companionEnabled: true, launchAtLogin: false, aiCopyEnabled: false, aiApiKey: '', aiTone: 'random', voiceStyle: 'cute', ttsEngine: 'edge', edgeTtsVoice: 'zh-CN-XiaoxiaoNeural', ttsVoiceName: '' },
+  meetings: { items: [] },
   pet: { visible: true, position: null, displayMode: 'full' },
   companion: { nextAmbientAt: null, lastAmbientAt: null, recentLines: [] }
 };
 const PUBLIC_SETTING_KEYS = ['preset', 'customFocus', 'customBreak', 'voiceMode', 'muted', 'volume', 'interactions', 'companionEnabled', 'launchAtLogin', 'aiCopyEnabled', 'aiTone', 'voiceStyle', 'ttsEngine', 'edgeTtsVoice', 'ttsVoiceName'];
 const TIME_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)$/;
+function meetingId(now) {
+  return `meeting-${now}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function minutesOfDay(value) {
+  if (!TIME_PATTERN.test(String(value || ''))) return null;
+  const [hour, minute] = value.split(':').map(Number);
+  return hour * 60 + minute;
+}
+
+function timeFromMinutes(minutes) {
+  const clamped = Math.min(23 * 60 + 59, Math.max(0, minutes));
+  return `${String(Math.floor(clamped / 60)).padStart(2, '0')}:${String(clamped % 60).padStart(2, '0')}`;
+}
+
+function normalizeMeeting(input, fallback = {}, now = Date.now()) {
+  const title = String(input?.title ?? fallback.title ?? '会议').trim().slice(0, 40) || '会议';
+  const startTime = TIME_PATTERN.test(String(input?.startTime || '')) ? input.startTime : (fallback.startTime || '10:00');
+  let endTime = TIME_PATTERN.test(String(input?.endTime || '')) ? input.endTime : (fallback.endTime || '11:00');
+  if (minutesOfDay(endTime) <= minutesOfDay(startTime)) endTime = timeFromMinutes((minutesOfDay(startTime) ?? 10 * 60) + 60);
+  const weekdays = [...new Set((Array.isArray(input?.weekdays) ? input.weekdays : fallback.weekdays || [1, 2, 3, 4, 5])
+    .map(Number).filter((day) => Number.isInteger(day) && day >= 0 && day <= 6))].sort();
+  return {
+    id: String(input?.id || fallback.id || meetingId(now)),
+    title,
+    startTime,
+    endTime,
+    weekdays: weekdays.length ? weekdays : (fallback.weekdays || [1, 2, 3, 4, 5]),
+    enabled: input?.enabled === undefined ? fallback.enabled !== false : Boolean(input.enabled),
+    autoMute: input?.autoMute === undefined ? fallback.autoMute !== false : Boolean(input.autoMute),
+    createdAt: Number(input?.createdAt || fallback.createdAt) || now
+  };
+}
+
+function normalizeMeetingList(meetings, now = Date.now()) {
+  const source = Array.isArray(meetings?.items) ? meetings.items : Array.isArray(meetings) ? meetings : [];
+  return { items: source.map((item) => normalizeMeeting(item, {}, now)).sort((left, right) => left.startTime.localeCompare(right.startTime) || left.title.localeCompare(right.title)) };
+}
+
+function inMeetingNow(meeting, now) {
+  if (!meeting.enabled || !meeting.autoMute) return false;
+  const date = new Date(now);
+  if (!meeting.weekdays.includes(date.getDay())) return false;
+  const start = minutesOfDay(meeting.startTime);
+  const end = minutesOfDay(meeting.endTime);
+  const current = date.getHours() * 60 + date.getMinutes();
+  return start != null && end != null && start < end && current >= start && current < end;
+}
 
 export class AppRuntime {
   constructor({ store, onState = () => {}, onPresentation = () => {}, onNotify = () => {}, clock = new SystemClock(), aiCopy = new AiAlarmCopy(), random = Math.random, aiDeadlineMs = 1_500 }) {
@@ -32,6 +81,7 @@ export class AppRuntime {
     this.data = migrateTo016(await this.store.load(defaults), this.clock.now());
     this.data.settings = { ...defaults.settings, ...(this.data.settings || {}) };
     this.data.offwork = { ...defaultOffwork(), ...(this.data.offwork || {}) };
+    this.data.meetings = normalizeMeetingList(this.data.meetings, this.clock.now());
     const savedPet = this.data.pet || {};
     this.data.pet = { ...defaults.pet, ...savedPet };
     if (!['full', 'pet', 'timer', 'hidden'].includes(savedPet.displayMode)) this.data.pet.displayMode = savedPet.visible === false ? 'hidden' : 'full';
@@ -52,6 +102,10 @@ export class AppRuntime {
     const day = localDayKey(this.clock.now());
     const todos = this.todos.snapshot();
     const settings = Object.fromEntries(PUBLIC_SETTING_KEYS.map((key) => [key, this.data.settings[key]]));
+    const meetingMuted = this.data.meetings.items.some((meeting) => inMeetingNow(meeting, this.clock.now()));
+    settings.manualMuted = Boolean(this.data.settings.muted);
+    settings.meetingMuted = meetingMuted;
+    settings.muted = settings.manualMuted || meetingMuted;
     settings.aiKeyConfigured = Boolean(String(this.data.settings.aiApiKey || '').trim());
     return { timer: { ...timer, remainingMs: this.timer.remaining(), todayCount: timer.completedByDay[localDayKey(this.clock.now())] || 0 },
       breakContinuation: this.#breakContinuation(),
@@ -60,9 +114,10 @@ export class AppRuntime {
         analytics: this.activity.snapshot(),
         now: this.clock.now(),
         currentTimer: timer,
-        workStart: this.offwork.state.workStart
+        workStart: this.offwork.state.workStart,
+        meetings: this.data.meetings.items
       }),
-      offwork: this.offwork.snapshot(), settings, persona: this.data.persona, aiStatus: this.aiStatus, pet: this.data.pet, companion: this.data.companion, now: this.clock.now() };
+      offwork: this.offwork.snapshot(), meetings: this.data.meetings, settings, persona: this.data.persona, aiStatus: this.aiStatus, pet: this.data.pet, companion: this.data.companion, now: this.clock.now() };
   }
   emit() { this.onState(this.view()); }
   async tick() {
@@ -102,6 +157,14 @@ export class AppRuntime {
     if (name === 'alarm:update') this.alarms.update(payload.id, payload.patch);
     if (name === 'alarm:remove') this.alarms.remove(payload.id);
     if (name === 'alarm:enabled') this.alarms.setEnabled(payload.id, payload.enabled);
+    if (name === 'meeting:add') this.data.meetings = { items: [...this.data.meetings.items, normalizeMeeting(payload, {}, this.clock.now())] };
+    if (name === 'meeting:update') {
+      const existing = this.data.meetings.items.find((item) => item.id === payload.id);
+      if (!existing) throw new Error('meeting_unavailable');
+      this.data.meetings = { items: this.data.meetings.items.map((item) => item.id === payload.id ? normalizeMeeting({ ...item, ...(payload.patch || {}) }, item, this.clock.now()) : item) };
+    }
+    if (name === 'meeting:remove') this.data.meetings = { items: this.data.meetings.items.filter((item) => item.id !== payload.id) };
+    if (name === 'meeting:enabled') this.data.meetings = { items: this.data.meetings.items.map((item) => item.id === payload.id ? { ...item, enabled: Boolean(payload.enabled) } : item) };
     if (name === 'alarm:snooze') {
       this.alarms.snooze(payload.alarmId, payload.occurrenceId, payload.minutes || 10);
       this.activity.respondReminder(payload.occurrenceId, { type: 'snoozed', respondedAt: this.clock.now(), snoozeMinutes: payload.minutes || 10 });
@@ -154,7 +217,7 @@ export class AppRuntime {
   }
   async persist() {
     this.data.timer = this.timer.snapshot(); this.data.todos = this.todos.snapshot(); const alarms = this.alarms.snapshot(); this.data.alarms = alarms.alarms; this.data.ledger = alarms.ledger;
-    this.data.analytics = this.activity.snapshot(); this.data.copyLast = this.copy.snapshot(); this.data.offwork = this.offwork.snapshot(); await this.store.save(this.data); this.dirty = false;
+    this.data.analytics = this.activity.snapshot(); this.data.copyLast = this.copy.snapshot(); this.data.offwork = this.offwork.snapshot(); this.data.meetings = normalizeMeetingList(this.data.meetings, this.clock.now()); await this.store.save(this.data); this.dirty = false;
   }
   async setAiKey(value) {
     if (typeof value !== 'string' || value.length > 512) throw new Error('invalid_ai_key');

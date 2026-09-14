@@ -56,8 +56,9 @@ a {
   top: 0;
   left: 78px;
   right: 0;
-  height: 210px;
+  height: 72px;
   z-index: 5;
+  pointer-events: none;
   -webkit-app-region: drag;
 }
 .shell {
@@ -559,6 +560,8 @@ a {
   display: flex;
   gap: 8px;
   margin: 28px 6px 12px;
+  position: relative;
+  z-index: 6;
 }
 .tabs button {
   background: transparent;
@@ -574,6 +577,8 @@ a {
   display: none;
   padding: 25px 29px;
   min-height: 200px;
+  position: relative;
+  z-index: 6;
   -webkit-app-region: no-drag;
 }
 .drawer.active {
@@ -588,7 +593,7 @@ a {
 #reviewDateSelect { display: block; min-width: 190px; padding: 10px 34px 10px 12px; border: 1px solid var(--line); border-radius: 7px; background: #fffdf8; }
 .review-summary {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   margin: 28px 0 0;
   border-top: 1px solid var(--line);
   border-bottom: 1px solid var(--line);
@@ -611,6 +616,7 @@ a {
 .review-timeline-track { position: relative; height: 34px; overflow: hidden; border-radius: 6px; background: #eee7dc; }
 .review-timeline-segment { position: absolute; inset-block: 0; display: flex; align-items: center; min-width: 2px; overflow: hidden; padding: 0 7px; color: white; font-size: 10px; white-space: nowrap; }
 .review-timeline-segment.kind-focus { background: var(--green); }
+.review-timeline-segment.kind-meeting { background: #9d82a1; }
 .review-timeline-segment.kind-break { background: #56848b; }
 .review-timeline-segment.kind-excluded { color: #776c63; background: repeating-linear-gradient(135deg, #e4d9cb 0, #e4d9cb 6px, #f4eee5 6px, #f4eee5 12px); }
 .review-timeline-segment.kind-unrecorded { color: #887a70; background: #eee7dc; }
@@ -620,6 +626,51 @@ a {
 .review-reminders { display: flex; gap: 7px; margin: 14px 0 0 120px; flex-wrap: wrap; }
 .review-reminders span { padding: 5px 8px; border-radius: 5px; background: rgba(113, 146, 108, .12); color: var(--green); font-size: 11px; }
 .review-reminders b { font-size: 12px; }
+.review-meeting-head { margin-top: 22px; }
+.review-meeting-gantt {
+  min-width: 0;
+  margin-left: 120px;
+}
+.meeting-gantt {
+  display: grid;
+  gap: 8px;
+}
+.meeting-gantt-row {
+  display: grid;
+  grid-template-columns: minmax(70px, 104px) minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+.meeting-gantt-row > strong {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.meeting-gantt-row > div {
+  position: relative;
+  height: 28px;
+  overflow: hidden;
+  border-radius: 6px;
+  background: rgba(157, 130, 161, .12);
+}
+.meeting-gantt-row span {
+  position: absolute;
+  inset-block: 0;
+  display: flex;
+  align-items: center;
+  min-width: 3px;
+  overflow: hidden;
+  padding: 0 8px;
+  border-radius: 6px;
+  background: #9d82a1;
+  color: white;
+  font-size: 10px;
+  font-weight: 800;
+  white-space: nowrap;
+}
 .review-lower { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(300px, .9fr); gap: 30px; padding-top: 24px; }
 .review-tasks { display: grid; gap: 15px; }
 .review-task-row { display: grid; grid-template-columns: minmax(90px, 120px) minmax(100px, 1fr) 70px; align-items: center; gap: 12px; font-size: 12px; }
@@ -633,11 +684,12 @@ a {
 .review-empty { margin: 10px 0; color: var(--muted); font-size: 11px; }
 .review-drawer { --review-task-0: #729775; --review-task-1: #56848b; --review-task-2: #d88d52; --review-task-3: #9d82a1; }
 @media (max-width: 1100px) {
-  .review-summary strong { font-size: 24px; }
+  .review-summary strong { font-size: 18px; }
 }
 @media (max-width: 820px) {
   .review-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .review-summary > div:nth-child(3) { border-left: 0; }
+  .review-summary > div { border-top: 0; }
+  .review-summary > div:nth-child(odd) { border-left: 0; }
   .review-summary > div:nth-child(n+3) { border-top: 1px solid var(--line); }
   .review-lower { grid-template-columns: 1fr; }
   .review-insights { padding-top: 4px; }
@@ -648,6 +700,8 @@ a {
   #reviewDateSelect { width: 100%; }
   .review-timeline-axis { margin-left: 68px; }
   .review-timeline-row { grid-template-columns: 58px minmax(0, 1fr); gap: 10px; }
+  .review-meeting-gantt { margin-left: 68px; }
+  .meeting-gantt-row { grid-template-columns: minmax(52px, 70px) minmax(0, 1fr); }
   .review-reminders { margin-left: 68px; }
   .review-task-row { grid-template-columns: minmax(80px, 110px) minmax(70px, 1fr) 66px; gap: 8px; }
 }
@@ -684,6 +738,9 @@ a {
   display: grid;
   gap: 10px;
   margin-top: 20px;
+}
+.meeting-list {
+  display: grid;
 }
 .alarm-item {
   display: grid;
@@ -1061,6 +1118,9 @@ footer {
 .pet-timer[data-phase="break"] { --timer-color: #4f7f86; }
 .pet-timer[data-paused="true"] { --timer-color: #776f69; }
 .pet-stage[data-display-mode="timer"]:not(.is-presenting) .pet-timer { bottom: 31px; }
+.pet-stage[data-display-mode="timer"]:not(.is-presenting) .pet-timer { cursor: grab; }
+.pet-stage[data-display-mode="timer"]:not(.is-presenting) .pet-timer:active { cursor: grabbing; }
+.pet-stage[data-display-mode="timer"]:not(.is-presenting) .pet-timer-controls button { cursor: pointer; }
 .pet-stage[data-display-mode="timer"]:not(.is-presenting) .pet-menu { bottom: 3px; }
 .quick-menu {
   position: absolute;
@@ -1562,13 +1622,15 @@ footer {
   color: var(--muted);
   font-size: 12px;
 }
-.reminder-workspace {
+.reminder-workspace,
+.meeting-workspace {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(330px, 390px);
   min-height: 500px;
   margin: 0 -24px -24px;
 }
-.reminder-list-pane {
+.reminder-list-pane,
+.meeting-list-pane {
   min-width: 0;
   padding: 20px 24px 24px;
   border-right: 1px solid rgba(111, 78, 56, 0.12);
@@ -1587,7 +1649,8 @@ footer {
   font-size: 11px;
   text-align: right;
 }
-.reminder-editor {
+.reminder-editor,
+.meeting-editor {
   min-width: 0;
   padding: 20px 24px 24px;
   background: rgba(250, 244, 235, 0.72);
@@ -1681,11 +1744,13 @@ footer {
 .is-saving button {
   cursor: progress;
 }
-.reminder-list-pane .alarm-list {
+.reminder-list-pane .alarm-list,
+.meeting-list {
   gap: 0;
   margin-top: 10px;
 }
-.reminder-list-pane .alarm-item {
+.reminder-list-pane .alarm-item,
+.meeting-item {
   position: relative;
   display: grid;
   grid-template-columns: 44px minmax(0, 1fr) auto auto;
@@ -1700,29 +1765,70 @@ footer {
   background: rgba(113, 146, 108, 0.08);
   box-shadow: inset 3px 0 var(--green);
 }
+.meeting-item.selected {
+  background: rgba(157, 130, 161, 0.1);
+  box-shadow: inset 3px 0 #9d82a1;
+}
+.meeting-clock {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 7px;
+  background: rgba(157, 130, 161, 0.12);
+  color: #7a5f80;
+  font-variant-numeric: tabular-nums;
+}
+.meeting-clock strong,
+.meeting-clock span {
+  display: block;
+  font-size: 10px;
+  line-height: 1.2;
+}
+.meeting-clock strong {
+  font-size: 12px;
+}
 .alarm-pose {
   width: 42px;
   height: 42px;
   object-fit: contain;
 }
-.reminder-list-pane .alarm-meta {
+.reminder-list-pane .alarm-meta,
+.meeting-meta {
   min-width: 0;
 }
 .reminder-list-pane .alarm-meta strong,
 .reminder-list-pane .alarm-meta small,
-.reminder-list-pane .alarm-meta span {
+.reminder-list-pane .alarm-meta span,
+.meeting-meta strong,
+.meeting-meta small,
+.meeting-meta span {
   display: block;
   overflow-wrap: anywhere;
 }
 .reminder-list-pane .alarm-meta small,
-.reminder-list-pane .alarm-meta span {
+.reminder-list-pane .alarm-meta span,
+.meeting-meta small,
+.meeting-meta span {
   margin-top: 4px;
   color: var(--muted);
   font-size: 10px;
   line-height: 1.35;
 }
-.reminder-list-pane .alarm-meta span {
+.reminder-list-pane .alarm-meta span,
+.meeting-meta span {
   color: var(--green);
+}
+.meeting-switch {
+  min-height: 34px;
+  margin-top: 12px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.meeting-switch input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--green);
 }
 .alarm-status {
   display: inline-flex;
@@ -2016,15 +2122,21 @@ footer {
 
 @media (max-width: 820px) {
   .reminder-workspace,
+  .meeting-workspace,
   .persona-layout {
     grid-template-columns: minmax(0, 1fr);
   }
   .reminder-list-pane,
+  .meeting-list-pane,
   .persona-editor {
     border-right: 0;
     border-bottom: 1px solid rgba(111, 78, 56, 0.12);
   }
   .reminder-list-pane {
+    max-height: 330px;
+    overflow-y: auto;
+  }
+  .meeting-list-pane {
     max-height: 330px;
     overflow-y: auto;
   }
@@ -2045,17 +2157,21 @@ footer {
   .reminder-templates strong {
     width: 100%;
   }
-  .reminder-workspace {
+  .reminder-workspace,
+  .meeting-workspace {
     margin-inline: -16px;
     margin-bottom: -20px;
   }
   .reminder-list-pane,
+  .meeting-list-pane,
   .reminder-editor,
+  .meeting-editor,
   .persona-editor,
   .persona-preview {
     padding: 18px 16px;
   }
-  .reminder-list-pane .alarm-item {
+  .reminder-list-pane .alarm-item,
+  .meeting-item {
     grid-template-columns: 40px minmax(0, 1fr) auto;
   }
   .alarm-status {
