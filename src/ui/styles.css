@@ -175,9 +175,18 @@ a {
   padding: 9px 2px;
   font-size: 18px;
   outline: none;
+  -webkit-app-region: no-drag;
 }
-.task:focus {
-  border-color: var(--tomato);
+.task-display {
+  min-height: 47px;
+  display: flex;
+  align-items: center;
+  color: var(--ink);
+  font-weight: 800;
+}
+.task-display.is-empty {
+  color: var(--muted);
+  font-weight: 600;
 }
 .break-continuation {
   margin-top: 14px;

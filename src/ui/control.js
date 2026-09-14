@@ -235,8 +235,7 @@ function render(next) {
   renderTimerClock();
   $('#todayCount').textContent = timer.todayCount || 0;
   renderTodayReward();
-  const selectedTodo = activeTodo();
-  if (document.activeElement !== $('#task')) $('#task').value = timer.task || selectedTodo?.title || '';
+  renderTaskDisplay();
   $('#phase').textContent = timer.status === 'idle' || timer.status === 'stopped' ? '准备专注' : timer.phase === 'break' ? '休息一下' : timer.status === 'paused' ? '暂停中' : '末末陪你专注中';
   $('#mainAction').textContent = timer.status === 'paused' ? '继续' : timer.status === 'running' ? '暂停' : '开始专注';
   $('#complete').textContent = timer.phase === 'break' ? '结束休息' : '提前完成';
@@ -281,6 +280,12 @@ function renderTodayReward() {
   const rewardUnit = sessions.persona?.draft?.rewardUnit === 'biscuit' ? 'biscuit' : 'tomato';
   $('#todayRewardVerb').textContent = rewardUnit === 'biscuit' ? '今天喂了' : '今天摘了';
   $('#todayRewardNoun').textContent = rewardUnit === 'biscuit' ? '块饼干' : '颗番茄';
+}
+
+function renderTaskDisplay() {
+  const task = String(state.timer?.task || activeTodo()?.title || '').trim();
+  $('#task').textContent = task || '选择一个今日待办开始';
+  $('#task').classList.toggle('is-empty', !task);
 }
 
 function compactDuration(ms) {
@@ -842,14 +847,12 @@ const saveCustomDurations = () => {
   });
   return customDurationSaveChain;
 };
-$('#mainAction').onclick = async () => { const timer = state.timer; if (timer.status === 'running') return command('timer:pause'); if (timer.status === 'paused') return command('timer:resume'); if (selectedPreset === 'custom' && !await saveCustomDurations()) return; const preset = selectedDurations(); const todo = activeTodo(); return command('timer:start', { task: $('#task').value || todo?.title || '', todoId: todo?.id || null, focusMinutes: preset[0], breakMinutes: preset[1] }); };
+$('#mainAction').onclick = async () => { const timer = state.timer; if (timer.status === 'running') return command('timer:pause'); if (timer.status === 'paused') return command('timer:resume'); if (selectedPreset === 'custom' && !await saveCustomDurations()) return; const preset = selectedDurations(); const todo = activeTodo(); return command('timer:start', { task: timer.task || todo?.title || '', todoId: todo?.id || null, focusMinutes: preset[0], breakMinutes: preset[1] }); };
 [$('#focusMinutes'), $('#breakMinutes')].forEach((input) => {
   input.oninput = rememberCustomDurationDraft;
   input.onchange = () => { void saveCustomDurations(); };
   input.onkeydown = (event) => { if (event.key === 'Enter') { event.preventDefault(); input.blur(); } };
 });
-$('#task').onblur = async () => { const task = $('#task').value; if (task.trim() !== (state.timer.task || '').trim()) await sendCommand('timer:updateTask', { task }); };
-$('#task').onkeydown = (event) => { if (event.key === 'Enter') { event.preventDefault(); $('#task').blur(); } };
 $('#todoTitle').oninput = (event) => editSession('todoAdd', { title: event.target.value });
 $('#todoPriority').onchange = (event) => editSession('todoAdd', { priority: event.target.value });
 $('#todoEstimate').oninput = (event) => editSession('todoAdd', { estimatePomos: Number(event.target.value) || 1 });

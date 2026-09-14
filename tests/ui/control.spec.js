@@ -22,8 +22,7 @@ test('control surface renders and completes browser fallback timer flow', async 
   await page.locator('#addTodo').click();
   await expect(page.locator('.todo-item')).toHaveCount(1);
   await expect(page.locator('#todoStats')).toContainText('计划 2 番茄');
-  await expect(page.locator('#task')).toHaveValue('完成S级评论需求的代码CR和测试');
-  await page.getByPlaceholder('这颗番茄，想完成什么？').fill('验证 Pomopet 核心流程');
+  await expect(page.locator('#task')).toHaveText('完成S级评论需求的代码CR和测试');
   await page.getByRole('button', { name: '开始专注', exact: true }).click(); await expect(page.getByRole('button', { name: '暂停' })).toBeVisible();
   await expect(page.locator('#clock')).toHaveText(/^24:5[89]$/);
   await page.getByRole('button', { name: '暂停' }).click(); await expect(page.getByRole('button', { name: '继续' })).toBeVisible();
@@ -216,10 +215,10 @@ test('control renderer suppresses chatter while typing and editing without overw
 
   await page.goto('/');
   await page.locator('#task').focus();
+  expect(await page.evaluate(() => globalThis.__suppressionCommands.filter((item) => item.name === 'companion:suppress'))).toEqual([]);
+  await page.locator('#todoTitle').focus();
   await expect.poll(() => page.evaluate(() => globalThis.__suppressionCommands.filter((item) => item.name === 'companion:suppress')))
     .toEqual([{ name: 'companion:suppress', payload: { source: 'typing', active: true } }]);
-  await page.locator('#todoTitle').focus();
-  await expect.poll(() => page.evaluate(() => globalThis.__suppressionCommands.filter((item) => item.name === 'companion:suppress'))).toHaveLength(1);
   await page.locator('#addTodo').focus();
   await expect.poll(() => page.evaluate(() => globalThis.__suppressionCommands.filter((item) => item.name === 'companion:suppress')))
     .toEqual([
@@ -276,7 +275,7 @@ test('control keeps AI keys write-only and uses the dedicated bridge', async ({ 
   await expect(page.locator('#aiApiKey')).toHaveValue('');
 });
 
-test('task field keeps edits during state ticks and saves on blur', async ({ page }) => {
+test('task display is read-only and follows the current timer task', async ({ page }) => {
   await page.addInitScript(() => {
     const state = {
       now: Date.now(),
@@ -287,12 +286,15 @@ test('task field keeps edits during state ticks and saves on blur', async ({ pag
       pet: { visible: true, position: null }
     };
     const listeners = [];
+    const commands = [];
     const copy = (value) => JSON.parse(JSON.stringify(value));
     globalThis.__emitPomopetState = () => listeners.forEach((callback) => callback(copy(state)));
+    globalThis.__setTimerTask = (task) => { state.timer.task = task; };
+    globalThis.__taskCommands = commands;
     globalThis.pomopet = {
       getState: async () => copy(state),
       command: async (name, payload) => {
-        if (name === 'timer:updateTask') state.timer.task = String(payload.task || '').trim();
+        commands.push({ name, payload });
         state.now = Date.now();
         globalThis.__emitPomopetState();
         return copy(state);
@@ -303,14 +305,17 @@ test('task field keeps edits during state ticks and saves on blur', async ({ pag
   });
 
   await page.goto('/');
-  await expect(page.locator('#task')).toHaveValue('旧任务');
-  await page.locator('#task').fill('新任务');
+  await expect(page.locator('#task')).toHaveText('旧任务');
+  await expect(page.locator('#task')).not.toHaveAttribute('contenteditable', 'true');
+  await expect(page.locator('#task')).not.toHaveJSProperty('value', '旧任务');
   await page.evaluate(() => globalThis.__emitPomopetState());
-  await expect(page.locator('#task')).toHaveValue('新任务');
-  await page.locator('#task').blur();
-  await expect(page.locator('#task')).toHaveValue('新任务');
+  await expect(page.locator('#task')).toHaveText('旧任务');
+  expect(await page.locator('#task').evaluate((node) => ['INPUT', 'TEXTAREA', 'SELECT'].includes(node.tagName))).toBe(false);
+  await expect(page.locator('#task')).toHaveAttribute('aria-label', '当前任务');
+  expect(await page.evaluate(() => globalThis.__taskCommands)).toEqual([]);
+  await page.evaluate(() => globalThis.__setTimerTask('新任务'));
   await page.evaluate(() => globalThis.__emitPomopetState());
-  await expect(page.locator('#task')).toHaveValue('新任务');
+  await expect(page.locator('#task')).toHaveText('新任务');
 });
 
 test('todo list add, enter and delete update immediately while preserving active edits', async ({ page }) => {
@@ -387,7 +392,7 @@ test('an unfinished Todo can start the selected Pomodoro preset directly', async
 
   await expect(page.locator('#phase')).toHaveText('末末陪你专注中');
   await expect(page.locator('#clock')).toHaveText(/^(50:00|49:5[89])$/);
-  await expect(page.locator('#task')).toHaveValue('直接开始这件事');
+  await expect(page.locator('#task')).toHaveText('直接开始这件事');
   await expect(page.locator('.todo-start')).toBeDisabled();
 });
 
