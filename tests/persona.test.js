@@ -24,13 +24,19 @@ describe('pet personas', () => {
       .toBe(fallbackLine('focusComplete', { task: '写方案', persona: { ...base, customPrompt: '' } }, () => 0));
   });
 
+  it('keeps the configured focus reward unit on the normalized persona', () => {
+    expect(defaultPersona().rewardUnit).toBe('tomato');
+    expect(normalizePersona({ rewardUnit: 'biscuit' }).rewardUnit).toBe('biscuit');
+    expect(normalizePersona({ rewardUnit: 'bone' }).rewardUnit).toBe('tomato');
+  });
+
   it('normalizes lengths, ranges, whitespace and invalid fields', () => {
     expect(normalizePersona({
       preset: 'unknown', petName: `  ${'宠'.repeat(20)}  `, ownerName: '', customPrompt: `  ${'设'.repeat(600)}  `,
-      teaseLevel: 130.7, chatFrequency: 'constant'
+      teaseLevel: 130.7, chatFrequency: 'constant', rewardUnit: 'biscuit'
     })).toEqual({
       preset: 'gentle', petName: '宠'.repeat(12), ownerName: '主人', customPrompt: '设'.repeat(500),
-      teaseLevel: 100, chatFrequency: 'occasional'
+      teaseLevel: 100, chatFrequency: 'occasional', rewardUnit: 'biscuit'
     });
     expect(normalizePersona({ teaseLevel: 'invalid' }).teaseLevel).toBe(35);
     expect(FREQUENCIES).toEqual({ quiet: [45, 70], occasional: [20, 35], lively: [10, 20] });

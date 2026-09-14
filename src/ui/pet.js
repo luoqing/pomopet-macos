@@ -28,6 +28,7 @@ const labels = {
   interactionPet: '摸摸头', interactionFeed: '开饭啦', interactionBall: '去抢球', comfort: '挠肚皮',
   ...PET_POSE_LABELS
 };
+const rewardLabel = () => state?.persona?.rewardUnit === 'biscuit' ? '饼干到账啦' : labels.reward;
 const poses = {
   ...PET_POSE_ASSETS,
   idle: 'focus', focus: 'focus', reward: 'reward', break: 'ball', breakComplete: 'focus', alarm: 'annoyed', water: 'water',
@@ -199,7 +200,7 @@ function show(event) {
   clearTimeout(rewardTimer);
   setVisualState(event.kind);
   speech.classList.remove('hidden');
-  document.querySelector('#speechLabel').textContent = event.displayLabel || labels[event.kind] || '末末想说';
+  document.querySelector('#speechLabel').textContent = event.displayLabel || (event.kind === 'reward' ? rewardLabel() : labels[event.kind]) || '末末想说';
   document.querySelector('#speechText').textContent = (event.label ? `${event.label}：` : '') + event.text;
   const hasReminderActions = Boolean(event.actions?.alarmId || event.actions?.offwork);
   const hasRewardActions = Boolean(event.actions?.reward && state?.settings?.interactions !== false);

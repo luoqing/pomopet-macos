@@ -430,7 +430,7 @@ test('reminder validation and save failures stay inline without losing the edito
   await page.addInitScript(() => {
     const state = { now: Date.now(), timer: { status: 'idle', phase: 'focus', remainingMs: 1 }, todos: { items: [], activeId: null }, alarms: [],
       offwork: { enabled: false, time: '18:30', weekdays: [1, 2, 3, 4, 5], pose: 'sleepy', blockMode: false, snoozeMinutes: 15, escalateMinutes: 15 },
-      persona: { preset: 'gentle', petName: '末末', ownerName: '主人', customPrompt: '', teaseLevel: 35, chatFrequency: 'occasional' }, settings: { preset: '25/5', voiceMode: 'off', volume: .5, ttsEngine: 'system', aiCopyEnabled: false, aiKeyConfigured: false, companionEnabled: true, launchAtLogin: false }, aiStatus: { status: 'builtin' } };
+      persona: { preset: 'gentle', petName: '末末', ownerName: '主人', customPrompt: '', teaseLevel: 35, chatFrequency: 'occasional', rewardUnit: 'tomato' }, settings: { preset: '25/5', voiceMode: 'off', volume: .5, ttsEngine: 'system', aiCopyEnabled: false, aiKeyConfigured: false, companionEnabled: true, launchAtLogin: false }, aiStatus: { status: 'builtin' } };
     globalThis.pomopet = { getState: async () => state, onState: () => () => {}, command: async (name) => { if (name === 'alarm:add') throw new Error('disk_full'); return state; }, setDirty: () => {}, onDiscardDrafts: () => () => {}, showControl: () => {} };
   });
   await page.goto('/'); await page.locator('#newAlarm').click();
@@ -453,9 +453,10 @@ test('persona presets preview live and save the complete persona payload', async
   await page.goto('/'); await page.getByRole('tab', { name: '宠物性格' }).click();
   await page.locator('[data-persona="clever"]').click(); await expect(page.locator('#personaWaterLine')).toContainText('大侠');
   await page.locator('#petName').fill('团子'); await page.locator('#ownerName').fill('阿青'); await page.locator('#customPrompt').fill('机灵俏皮，只提取特质，保持原创台词');
-  await page.locator('#teaseLevel').fill('72'); await expect(page.locator('#teaseOutput')).toHaveText('72%'); await page.locator('#chatFrequency').selectOption('lively'); await page.locator('#companionEnabled').uncheck(); await expect(page.locator('#chatFrequency')).toBeDisabled();
+  await page.locator('#teaseLevel').fill('72'); await expect(page.locator('#teaseOutput')).toHaveText('72%'); await page.locator('#rewardUnit').selectOption('biscuit'); await page.locator('#chatFrequency').selectOption('lively'); await page.locator('#companionEnabled').uncheck(); await expect(page.locator('#chatFrequency')).toBeDisabled();
+  await expect(page.locator('.today')).toContainText('今天喂了 0 块饼干');
   await page.getByRole('button', { name: '保存角色' }).click();
-  expect(await page.evaluate(() => globalThis.__commands.find(({ name }) => name === 'persona:update'))).toEqual({ name: 'persona:update', payload: { preset: 'clever', petName: '团子', ownerName: '阿青', customPrompt: '机灵俏皮，只提取特质，保持原创台词', teaseLevel: 72, chatFrequency: 'lively', companionEnabled: false } });
+  expect(await page.evaluate(() => globalThis.__commands.find(({ name }) => name === 'persona:update'))).toEqual({ name: 'persona:update', payload: { preset: 'clever', petName: '团子', ownerName: '阿青', customPrompt: '机灵俏皮，只提取特质，保持原创台词', teaseLevel: 72, chatFrequency: 'lively', companionEnabled: false, rewardUnit: 'biscuit' } });
   await expect(page.locator('#personaInspiration')).toContainText('台词保持原创');
   await page.screenshot({ path: 'artifacts/screenshots/persona-companion-settings.png', fullPage: true });
 });
@@ -529,6 +530,7 @@ test('meeting calendar saves weekly blocks with auto mute settings', async ({ pa
 test('meeting controls receive pointer hits above the window drag strip', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('tab', { name: '会议日历' }).click();
+  await page.getByRole('button', { name: '新建会议' }).click();
   for (const selector of ['#newMeeting', '#cancelMeeting', '#saveMeeting']) {
     const control = page.locator(selector);
     await control.scrollIntoViewIfNeeded();
@@ -541,6 +543,41 @@ test('meeting controls receive pointer hits above the window drag strip', async 
     });
     expect(hit).toEqual({ id: selector.slice(1), cursor: 'pointer', appRegion: 'no-drag' });
   }
+});
+
+test('meeting editor stays idle until the user explicitly starts creating or editing', async ({ page }) => {
+  await page.addInitScript(() => {
+    const state = {
+      now: Date.now(),
+      timer: { status: 'idle', phase: 'focus', remainingMs: 25 * 60_000, targetAt: null, todayCount: 0 },
+      todos: { items: [], activeId: null },
+      alarms: [],
+      meetings: { items: [{ id: 'meeting-1', title: '例会', startTime: '10:30', endTime: '11:00', weekdays: [1, 2, 3, 4, 5], enabled: true, autoMute: true }] },
+      review: { days: [] },
+      offwork: { enabled: false, time: '18:30', weekdays: [] },
+      persona: { preset: 'gentle', petName: '末末', ownerName: '主人', customPrompt: '', teaseLevel: 35, chatFrequency: 'occasional' },
+      settings: { preset: '25/5', voiceMode: 'off' },
+      aiStatus: { status: 'builtin' }
+    };
+    const commands = []; globalThis.__meetingCommands = commands;
+    globalThis.pomopet = {
+      getState: async () => structuredClone(state),
+      onState: () => () => {},
+      command: async (name, payload) => { commands.push({ name, payload }); return structuredClone(state); },
+      setDirty: () => {}, onDiscardDrafts: () => () => {}, showControl: () => {}
+    };
+  });
+
+  await page.goto('/');
+  await page.getByRole('tab', { name: '会议日历' }).click();
+  await expect(page.locator('#meetingTitle')).toBeDisabled();
+  await expect(page.locator('#saveMeeting')).toBeDisabled();
+  await page.locator('#meetingForm').evaluate((form) => form.requestSubmit());
+  expect(await page.evaluate(() => globalThis.__meetingCommands)).toEqual([]);
+
+  await page.getByRole('button', { name: '新建会议' }).click();
+  await expect(page.locator('#meetingTitle')).toBeEnabled();
+  await expect(page.locator('#saveMeeting')).toBeEnabled();
 });
 
 test('dirty tab switching and renderer discard callback protect every active draft', async ({ page }) => {
@@ -1226,7 +1263,7 @@ test('pet menu toggles mute while keeping reminder copy visible', async ({ page 
 test('completed focus presentation offers pet reward actions', async ({ page }) => {
   page.clock.install();
   await page.addInitScript(() => {
-    const state = { timer: { status: 'running', phase: 'break' }, settings: { voiceMode: 'off', volume: 0.75, interactions: true } };
+    const state = { timer: { status: 'running', phase: 'break' }, settings: { voiceMode: 'off', volume: 0.75, interactions: true }, persona: { rewardUnit: 'biscuit' } };
     const presentationListeners = [];
     const commands = [];
     globalThis.__pomopetCommands = commands;
@@ -1247,6 +1284,7 @@ test('completed focus presentation offers pet reward actions', async ({ page }) 
   await page.setViewportSize({ width: 300, height: 420 });
   await page.goto('/pet.html');
   await page.evaluate(() => globalThis.__showPetPresentation({ category: 'focusComplete', kind: 'reward', text: '漂亮，这颗番茄摘得很稳。起来喝口水，活动一下肩膀，再回来继续也不迟。', actions: { reward: true, rewardDelayMs: 3_200 }, duration: 10_000, priority: 400 }));
+  await expect(page.locator('#speechLabel')).toHaveText('饼干到账啦');
   await expect.poll(() => page.evaluate(() => globalThis.__petSpeaking.at(-1))).toMatchObject({ visible: true });
   expect(await page.evaluate(() => globalThis.__petSpeaking.at(-1).height)).toBeGreaterThan(280);
   await expect(page.getByRole('button', { name: '奖励饼干' })).toBeHidden();

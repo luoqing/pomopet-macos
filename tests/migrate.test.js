@@ -24,7 +24,7 @@ describe('migrateTo016', () => {
 
   it('maps aiTone to a persona and fills persona defaults', () => {
     const migrated = migrateTo016({ settings: { aiTone: 'sarcastic' } }, monday);
-    expect(migrated.persona).toEqual({ preset: 'witty', petName: '末末', ownerName: '主人', customPrompt: '', teaseLevel: 35, chatFrequency: 'occasional' });
+    expect(migrated.persona).toEqual({ preset: 'witty', petName: '末末', ownerName: '主人', customPrompt: '', teaseLevel: 35, chatFrequency: 'occasional', rewardUnit: 'tomato' });
     expect(migrateTo016({ settings: { aiTone: 'unknown' } }, monday).persona.preset).toBe('gentle');
   });
 

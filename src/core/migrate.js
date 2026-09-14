@@ -1,7 +1,7 @@
 import { localDayKey } from './time.js';
 
 const GRACE_MS = 15 * 60_000;
-const personaDefaults = { preset: 'gentle', petName: '末末', ownerName: '主人', customPrompt: '', teaseLevel: 35, chatFrequency: 'occasional' };
+const personaDefaults = { preset: 'gentle', petName: '末末', ownerName: '主人', customPrompt: '', teaseLevel: 35, chatFrequency: 'occasional', rewardUnit: 'tomato' };
 const tonePresets = { comfort: 'gentle', sarcastic: 'witty', angry: 'witty', cute: 'clever', happy: 'sunny' };
 
 export const migrateTo016 = (data = {}, now = Date.now()) => {

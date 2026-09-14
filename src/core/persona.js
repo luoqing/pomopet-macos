@@ -11,13 +11,19 @@ export const FREQUENCIES = {
   lively: [10, 20]
 };
 
+export const REWARD_UNITS = {
+  tomato: { label: '番茄' },
+  biscuit: { label: '饼干' }
+};
+
 const DEFAULT_PERSONA = {
   preset: 'gentle',
   petName: '末末',
   ownerName: '主人',
   customPrompt: '',
   teaseLevel: 35,
-  chatFrequency: 'occasional'
+  chatFrequency: 'occasional',
+  rewardUnit: 'tomato'
 };
 
 const LINES = {
@@ -101,7 +107,8 @@ export function normalizePersona(value = {}) {
   const numericTease = Number(value?.teaseLevel);
   const teaseLevel = Number.isFinite(numericTease) ? Math.round(Math.min(100, Math.max(0, numericTease))) : DEFAULT_PERSONA.teaseLevel;
   const chatFrequency = Object.hasOwn(FREQUENCIES, value?.chatFrequency) ? value.chatFrequency : DEFAULT_PERSONA.chatFrequency;
-  return { preset, petName, ownerName, customPrompt, teaseLevel, chatFrequency };
+  const rewardUnit = Object.hasOwn(REWARD_UNITS, value?.rewardUnit) ? value.rewardUnit : DEFAULT_PERSONA.rewardUnit;
+  return { preset, petName, ownerName, customPrompt, teaseLevel, chatFrequency, rewardUnit };
 }
 
 export function teaseBucket(value) {
