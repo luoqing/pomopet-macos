@@ -58,7 +58,7 @@ export class ActivityLedger {
     const day = this.ensureDay(input.startedAt, workRules);
     const interval = {
       id: `${input.id}:${day.date}:${input.kind || 'focus'}`, sourceId: input.id, cycleId: input.cycleId || input.id,
-      kind: input.kind || 'focus', todoId: input.todoId || null, taskTitle: input.taskTitle || '', label: input.label || null,
+      kind: input.kind || 'focus', source: input.source || 'timer', todoId: input.todoId || null, taskTitle: input.taskTitle || '', label: input.label || null,
       plannedMs: Number(input.plannedMs) || null, startedAt: input.startedAt, endedAt: null,
       segments: [{ startedAt: input.startedAt, endedAt: null }], status: 'running', completionReason: null,
       unplacedActiveMs: Math.max(0, Number(input.unplacedActiveMs) || 0)
@@ -93,6 +93,7 @@ export class ActivityLedger {
       ...clone(input),
       sourceId: input.id,
       cycleId: input.cycleId || input.id,
+      source: input.source || 'timer',
       segments: clone(input.segments || []),
       unplacedActiveMs: Math.max(0, Number(input.unplacedActiveMs) || 0)
     };
@@ -100,6 +101,34 @@ export class ActivityLedger {
     this.#storeFragments(source, workRules);
     this.state.appliedEventIds[input.id] = input.endedAt;
     return true;
+  }
+
+  recordManualFocus(input, workRules = {}) {
+    if (!input?.sourceId || !Number.isFinite(input.startedAt) || !Number.isFinite(input.endedAt) || input.endedAt <= input.startedAt) return null;
+    if (this.#findInterval(input.sourceId)) return null;
+    const segments = this.#subtractFocusSegments([{ startedAt: input.startedAt, endedAt: input.endedAt }]);
+    const spentMs = segments.reduce((total, segment) => total + segment.endedAt - segment.startedAt, 0);
+    if (!spentMs) return null;
+    const source = {
+      id: input.sourceId,
+      sourceId: input.sourceId,
+      cycleId: input.sourceId,
+      kind: 'focus',
+      source: 'manual',
+      todoId: input.todoId || null,
+      taskTitle: input.taskTitle || '',
+      label: null,
+      plannedMs: null,
+      startedAt: segments[0].startedAt,
+      endedAt: segments.at(-1).endedAt,
+      segments,
+      status: 'completed',
+      completionReason: 'manual',
+      unplacedActiveMs: 0
+    };
+    const intervals = this.#storeFragments(source, workRules);
+    this.state.appliedEventIds[input.sourceId] = input.endedAt;
+    return { intervals, spentMs };
   }
 
   recordReminder(input, workRules = {}) {
@@ -150,6 +179,28 @@ export class ActivityLedger {
     for (const day of Object.values(this.state.days)) day.intervals = day.intervals.filter((entry) => entry.kind === 'excluded' || entry.cycleId !== cycleId || entry.kind !== kind);
   }
 
+  #subtractFocusSegments(segments) {
+    const occupied = Object.values(this.state.days)
+      .flatMap((day) => day.intervals)
+      .filter((interval) => interval.kind === 'focus')
+      .flatMap((interval) => interval.segments || [])
+      .filter((segment) => Number.isFinite(segment.startedAt) && Number.isFinite(segment.endedAt) && segment.endedAt > segment.startedAt)
+      .sort((left, right) => left.startedAt - right.startedAt);
+    return segments.flatMap((segment) => {
+      let fragments = [segment];
+      for (const occupiedSegment of occupied) {
+        fragments = fragments.flatMap((fragment) => {
+          if (occupiedSegment.endedAt <= fragment.startedAt || occupiedSegment.startedAt >= fragment.endedAt) return [fragment];
+          return [
+            occupiedSegment.startedAt > fragment.startedAt && { startedAt: fragment.startedAt, endedAt: Math.min(fragment.endedAt, occupiedSegment.startedAt) },
+            occupiedSegment.endedAt < fragment.endedAt && { startedAt: Math.max(fragment.startedAt, occupiedSegment.endedAt), endedAt: fragment.endedAt }
+          ].filter(Boolean);
+        });
+      }
+      return fragments;
+    });
+  }
+
   #storeFragments(source, workRules = {}) {
     const byDay = new Map();
     for (const segment of source.segments.filter((entry) => Number.isFinite(entry.endedAt) && entry.endedAt >= entry.startedAt)) {
@@ -163,12 +214,15 @@ export class ActivityLedger {
     const finalDay = localDayKey(source.endedAt);
     if (!byDay.size || (source.unplacedActiveMs && !byDay.has(finalDay))) byDay.set(finalDay, []);
     const keys = [...byDay.keys()].sort();
-    keys.forEach((key, index) => {
+    const stored = keys.map((key, index) => {
       const segments = byDay.get(key); const terminal = index === keys.length - 1;
       const anchor = segments[0]?.startedAt ?? source.endedAt; const day = this.ensureDay(anchor, workRules);
-      day.intervals.push({ ...source, id: `${source.sourceId}:${key}:${source.kind}`, startedAt: segments[0]?.startedAt ?? source.endedAt,
+      const interval = { ...source, id: `${source.sourceId}:${key}:${source.kind}`, startedAt: segments[0]?.startedAt ?? source.endedAt,
         endedAt: segments.at(-1)?.endedAt ?? source.endedAt, segments, status: terminal ? source.status : 'split',
-        completionReason: terminal ? source.completionReason : null, unplacedActiveMs: terminal ? source.unplacedActiveMs : 0 });
+        completionReason: terminal ? source.completionReason : null, unplacedActiveMs: terminal ? source.unplacedActiveMs : 0 };
+      day.intervals.push(interval);
+      return clone(interval);
     });
+    return stored;
   }
 }

@@ -133,6 +133,7 @@ export class AppRuntime {
   }
   async command(name, payload = {}) {
     let events = [];
+    let manualFocus = null;
     if (name === 'timer:start') events = this.timer.start(payload);
     if (name === 'timer:pause') events = this.timer.pause();
     if (name === 'timer:resume') events = this.timer.resume();
@@ -172,6 +173,26 @@ export class AppRuntime {
       const todo = this.#scheduledTodo(payload.id);
       if (!todo || todo.scheduledStatus !== 'conflict') throw new Error('scheduled_plan_unavailable');
       events = [...this.timer.stop(), ...this.#startPlannedTodo(todo)];
+    }
+    if (name === 'focus:manual:add') {
+      const startedAt = Number(payload.startedAt);
+      const endedAt = Number(payload.endedAt);
+      const now = this.clock.now();
+      if (!Number.isFinite(startedAt) || !Number.isFinite(endedAt) || endedAt <= startedAt) throw new Error('invalid_manual_focus_range');
+      if (endedAt > now) throw new Error('manual_focus_in_future');
+      if (localDayKey(startedAt) !== localDayKey(endedAt)) throw new Error('manual_focus_cross_day');
+      const todo = payload.todoId ? this.todos.snapshot().items.find((item) => item.id === payload.todoId) : null;
+      if (payload.todoId && !todo) throw new Error('todo_unavailable');
+      const entry = this.activity.recordManualFocus({
+        sourceId: `manual:${now}:${Math.random().toString(36).slice(2, 8)}`,
+        todoId: todo?.id || null,
+        taskTitle: todo?.title || String(payload.taskTitle || '').trim().slice(0, 60),
+        startedAt,
+        endedAt
+      }, this.offwork.state);
+      if (!entry) throw new Error('manual_focus_overlaps_existing');
+      if (todo) this.todos.recordFocus(todo.id, entry.spentMs, { eventId: entry.intervals[0]?.sourceId });
+      manualFocus = { spentMs: entry.spentMs, trimmed: entry.spentMs < endedAt - startedAt };
     }
     if (name === 'alarm:add') this.alarms.add(payload);
     if (name === 'alarm:update') this.alarms.update(payload.id, payload.patch);
@@ -233,7 +254,11 @@ export class AppRuntime {
       this.data.pet.visible = payload.mode !== 'hidden';
     }
     if (name === 'interaction' && this.data.settings.interactions) this.#present({ category: payload.kind, kind: payload.kind, priority: PRIORITY.interaction, durableId: null, duration: 5_000 });
-    await this.#handle(events); if (this.alarms.consumeDirty()) this.dirty = true; await this.persist(); this.emit(); return this.view();
+    await this.#handle(events); if (this.alarms.consumeDirty()) this.dirty = true; await this.persist();
+    const response = this.view();
+    if (manualFocus) response.manualFocus = manualFocus;
+    this.onState(response);
+    return response;
   }
   async persist() {
     this.data.timer = this.timer.snapshot(); this.data.todos = this.todos.snapshot(); const alarms = this.alarms.snapshot(); this.data.alarms = alarms.alarms; this.data.ledger = alarms.ledger;

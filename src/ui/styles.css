@@ -629,6 +629,32 @@ a {
 .drawer.active {
   display: block;
 }
+.manual-focus-drawer {
+  max-width: 760px;
+  margin-inline: auto;
+}
+.manual-focus-form {
+  display: grid;
+  gap: 6px;
+  max-width: 620px;
+  margin-top: 24px;
+}
+.manual-focus-form .time-pair {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: end;
+  gap: 10px;
+}
+.manual-focus-form .time-pair > b {
+  padding-bottom: 10px;
+  color: var(--muted);
+}
+.manual-focus-notice {
+  min-height: 20px;
+  margin: 4px 0 0;
+  color: var(--green);
+  font-size: 13px;
+}
 .review-drawer { padding: 0; overflow: hidden; }
 .review-layout { min-height: 590px; }
 .review-detail { min-width: 0; padding: 32px 38px 38px; }

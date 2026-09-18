@@ -1009,11 +1009,48 @@ test('Todo row edit keeps its DOM node, focus, and caret across state ticks', as
   await expect(page.locator('.todo-item[data-id="other"] .todo-progress')).toContainText('3/1');
 });
 
+test('manual focus tab preserves its draft and submits the selected Todo time range', async ({ page }) => {
+  await page.addInitScript(() => {
+    const state = {
+      now: new Date('2026-09-04T11:00:00').getTime(),
+      timer: { status: 'idle', phase: 'focus', remainingMs: 25 * 60_000 },
+      todos: { activeId: 'todo-1', items: [{ id: 'todo-1', title: '整理需求', priority: 'P1', estimatePomos: 1, completedPomos: 0, spentMs: 0, done: false }] },
+      alarms: [], meetings: { items: [] }, review: { days: [] }, offwork: {}, persona: {}, settings: {}, aiStatus: { status: 'builtin' }
+    };
+    const listeners = []; const commands = []; const copy = (value) => JSON.parse(JSON.stringify(value));
+    globalThis.__manualFocusCommands = commands;
+    globalThis.__manualFocusTick = () => listeners.forEach((callback) => callback(copy(state)));
+    globalThis.pomopet = {
+      getState: async () => copy(state),
+      onState: (callback) => { listeners.push(callback); return () => {}; },
+      command: async (name, payload) => {
+        commands.push({ name, payload });
+        return { ...copy(state), manualFocus: { spentMs: 20 * 60_000, trimmed: true } };
+      },
+      setDirty: () => {}, onDiscardDrafts: () => () => {}, showControl: () => {}
+    };
+  });
+
+  await page.goto('/');
+  await page.getByRole('tab', { name: '补记时间' }).click();
+  await expect(page.locator('#manualFocusTodo')).toHaveValue('todo-1');
+  await page.locator('#manualFocusStart').fill('2026-09-04T10:00');
+  await page.locator('#manualFocusEnd').fill('2026-09-04T10:30');
+  await page.evaluate(() => globalThis.__manualFocusTick());
+  await expect(page.locator('#manualFocusStart')).toHaveValue('2026-09-04T10:00');
+  await page.getByRole('button', { name: '保存补记' }).click();
+  await expect.poll(() => page.evaluate(() => globalThis.__manualFocusCommands.find((item) => item.name === 'focus:manual:add'))).toEqual({
+    name: 'focus:manual:add',
+    payload: { todoId: 'todo-1', startedAt: new Date('2026-09-04T10:00').getTime(), endedAt: new Date('2026-09-04T10:30').getTime() }
+  });
+  await expect(page.locator('#manualFocusNotice')).toContainText('已保存未重叠的 20 分钟');
+});
+
 test('tabs expose ARIA relationships and support roving keyboard navigation', async ({ page }) => {
-  await page.goto('/'); const tabs = page.getByRole('tab'); await expect(page.getByRole('tablist')).toHaveCount(1); await expect(tabs).toHaveCount(5);
+  await page.goto('/'); const tabs = page.getByRole('tab'); await expect(page.getByRole('tablist')).toHaveCount(1); await expect(tabs).toHaveCount(7);
   await expect(tabs.nth(0)).toHaveAttribute('aria-selected', 'true'); await expect(tabs.nth(0)).toHaveAttribute('tabindex', '0'); await expect(page.getByRole('tabpanel', { name: '提醒计划' })).toBeVisible();
   await tabs.nth(0).focus(); await tabs.nth(0).press('ArrowRight'); await expect(tabs.nth(1)).toBeFocused(); await expect(tabs.nth(1)).toHaveAttribute('aria-selected', 'true');
-  await tabs.nth(1).press('End'); await expect(tabs.nth(4)).toBeFocused(); await tabs.nth(4).press('Home'); await expect(tabs.nth(0)).toBeFocused(); await tabs.nth(0).press('ArrowLeft'); await expect(tabs.nth(4)).toBeFocused();
+  await tabs.nth(1).press('End'); await expect(tabs.nth(6)).toBeFocused(); await tabs.nth(6).press('Home'); await expect(tabs.nth(0)).toBeFocused(); await tabs.nth(0).press('ArrowLeft'); await expect(tabs.nth(6)).toBeFocused();
   await page.getByRole('tab', { name: '宠物性格' }).click(); await page.locator('#petName').fill('有草稿'); page.once('dialog', (dialog) => dialog.dismiss()); await page.getByRole('tab', { name: '宠物性格' }).press('ArrowRight'); await expect(page.getByRole('tab', { name: '宠物性格' })).toBeFocused();
 });
 

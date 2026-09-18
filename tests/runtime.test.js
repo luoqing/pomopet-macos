@@ -755,6 +755,53 @@ describe('AppRuntime', () => {
     expect(restored.view().review.days[0].totals.focusMs).toBe(15 * 60_000);
   });
 
+  it('records manual focus against an optional Todo without completing a pomodoro', async () => {
+    const end = new Date(2026, 8, 4, 11, 0).getTime();
+    const clock = new FakeClock(end); const store = new MemoryStore();
+    const runtime = new AppRuntime({ store, clock }); await runtime.init();
+    await runtime.command('todo:add', { title: '补记的事项' });
+    const todoId = runtime.view().todos.activeId;
+
+    const view = await runtime.command('focus:manual:add', {
+      todoId,
+      startedAt: new Date(2026, 8, 4, 10, 15).getTime(),
+      endedAt: new Date(2026, 8, 4, 10, 45).getTime()
+    });
+
+    expect(view.manualFocus).toEqual({ spentMs: 30 * 60_000, trimmed: false });
+    expect(view.todos.items.find((item) => item.id === todoId)).toMatchObject({ spentMs: 30 * 60_000, completedPomos: 0 });
+    expect(view.review.days[0].totals.focusMs).toBe(30 * 60_000);
+    expect(runtime.data.analytics.days['2026-09-04'].intervals).toContainEqual(
+      expect.objectContaining({ kind: 'focus', source: 'manual', todoId })
+    );
+
+    const restored = new AppRuntime({ store, clock }); await restored.init();
+    expect(restored.view().review.days[0].totals.focusMs).toBe(30 * 60_000);
+  });
+
+  it('rejects invalid, future, cross-day, and unknown Todo manual focus entries', async () => {
+    const now = new Date(2026, 8, 4, 11, 0).getTime();
+    const runtime = new AppRuntime({ store: new MemoryStore(), clock: new FakeClock(now) }); await runtime.init();
+    const validStart = new Date(2026, 8, 4, 10, 0).getTime();
+
+    await expect(runtime.command('focus:manual:add', { startedAt: now, endedAt: validStart })).rejects.toThrow('invalid_manual_focus_range');
+    await expect(runtime.command('focus:manual:add', { startedAt: validStart, endedAt: now + 1 })).rejects.toThrow('manual_focus_in_future');
+    await expect(runtime.command('focus:manual:add', { startedAt: new Date(2026, 8, 3, 23, 50).getTime(), endedAt: validStart })).rejects.toThrow('manual_focus_cross_day');
+    await expect(runtime.command('focus:manual:add', { todoId: 'missing', startedAt: validStart, endedAt: now })).rejects.toThrow('todo_unavailable');
+  });
+
+  it('allows a manual focus entry to be linked to a completed Todo', async () => {
+    const now = new Date(2026, 8, 4, 11, 0).getTime();
+    const runtime = new AppRuntime({ store: new MemoryStore(), clock: new FakeClock(now) }); await runtime.init();
+    await runtime.command('todo:add', { title: '已经做完的事项' });
+    const todoId = runtime.view().todos.activeId;
+    await runtime.command('todo:toggle', { id: todoId, done: true });
+
+    await runtime.command('focus:manual:add', { todoId, startedAt: now - 30 * 60_000, endedAt: now });
+
+    expect(runtime.view().todos.items.find((item) => item.id === todoId)).toMatchObject({ spentMs: 30 * 60_000, completedPomos: 0 });
+  });
+
   it('records reminder occurrences by configured label and the first response', async () => {
     const start = new Date(2026, 8, 4, 10, 0).getTime();
     const clock = new FakeClock(start); const runtime = new AppRuntime({ store: new MemoryStore(), clock }); await runtime.init();

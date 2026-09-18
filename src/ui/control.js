@@ -31,8 +31,8 @@ const api = window.pomopet || createBrowserBridge();
 const weekdays = ['日', '一', '二', '三', '四', '五', '六'];
 const priorityLabels = { P0: 'P0 重要', P1: 'P1 今天', P2: 'P2 顺手' };
 const supportedIntervals = new Set([15, 30, 45, 60, 90, 120]);
-const sessions = { reminder: null, meeting: null, offwork: null, persona: null, settings: null, todoAdd: null, todo: null };
-const saveEpochs = { reminder: 0, meeting: 0, offwork: 0, persona: 0, settings: 0, todoAdd: 0, todo: 0 };
+const sessions = { reminder: null, manualFocus: null, meeting: null, offwork: null, persona: null, settings: null, todoAdd: null, todo: null };
+const saveEpochs = { reminder: 0, manualFocus: 0, meeting: 0, offwork: 0, persona: 0, settings: 0, todoAdd: 0, todo: 0 };
 const deleteConfirmations = new Map();
 const meetingDeleteConfirmations = new Map();
 const suppressionController = createSuppressionController({ send: (source, active) => api.command('companion:suppress', { source, active }) });
@@ -52,6 +52,7 @@ let customDurationDraft = null;
 let customDurationSaveChain = Promise.resolve();
 let lastQueuedCustomDuration = null;
 let selectedReviewDate = null;
+let manualFocusNotice = '';
 
 function createBrowserBridge() {
   const demo = {
@@ -118,6 +119,7 @@ const blankMeeting = () => ({ id: null, title: '', startTime: '10:00', endTime: 
 const meetingDraft = (meeting) => ({ ...blankMeeting(), ...structuredClone(meeting || {}), weekdays: [...(meeting?.weekdays || [1, 2, 3, 4, 5])] });
 const todoDraft = (todo) => ({ id: todo.id, title: todo.title, priority: todo.priority || 'P1', estimatePomos: Number(todo.estimatePomos || 1), focusMinutes: Number(todo.focusMinutes || selectedDurations()[0]), scheduledStartAt: Number(todo.scheduledStartAt) || null });
 const blankTodoAdd = (choices = {}) => ({ title: '', priority: choices.priority || 'P1', estimatePomos: Number(choices.estimatePomos || 1), focusMinutes: Number(choices.focusMinutes || selectedDurations()[0]) });
+const blankManualFocus = (next = state) => ({ todoId: next?.todos?.activeId || '', startedAt: '', endedAt: '' });
 
 function reportDirty() {
   updateNavigationLock();
@@ -216,6 +218,7 @@ function initializeSessions(next) {
   sessions.meeting = sessions.meeting ? syncEditableSaved(sessions.meeting, blankMeeting()) : createEditableSession(blankMeeting());
   if (!sessions.todoAdd) sessions.todoAdd = createDraftSession(blankTodoAdd());
   sessions.reminder = sessions.reminder ? syncEditableSaved(sessions.reminder, blankReminder()) : createEditableSession(blankReminder());
+  sessions.manualFocus = sessions.manualFocus ? syncDraftSaved(sessions.manualFocus, blankManualFocus(next)) : createDraftSession(blankManualFocus(next));
 }
 
 function render(next) {
@@ -252,6 +255,7 @@ function render(next) {
   renderTodoAdd();
   renderTodos();
   renderReminders();
+  renderManualFocus();
   renderMeetings();
   renderOffwork();
   renderReview();
@@ -571,6 +575,22 @@ function renderReminders() {
   renderReminderEditor();
 }
 
+function renderManualFocus() {
+  const session = sessions.manualFocus;
+  const draft = session.draft;
+  const saving = session.saving;
+  const todos = state.todos.items || [];
+  $('#manualFocusTodo').innerHTML = '<option value="">不关联待办</option>' + todos
+    .map((todo) => `<option value="${escapeAttr(todo.id)}">${escapeHtml(todo.title)}</option>`).join('');
+  $('#manualFocusTodo').value = todos.some((todo) => todo.id === draft.todoId) ? draft.todoId : '';
+  $('#manualFocusStart').value = draft.startedAt;
+  $('#manualFocusEnd').value = draft.endedAt;
+  $('#manualFocusError').textContent = session.error || '';
+  $('#manualFocusNotice').textContent = manualFocusNotice;
+  $('#manualFocusForm').setAttribute('aria-busy', String(saving));
+  $$('#manualFocusForm input, #manualFocusForm select, #manualFocusForm button').forEach((control) => { control.disabled = saving; });
+}
+
 function setReminderListSaving(saving) {
   $$('#alarmList input, #alarmList button, #newAlarm, [data-template]').forEach((control) => {
     if (control.disabled !== Boolean(saving)) control.disabled = Boolean(saving);
@@ -831,7 +851,7 @@ function cancelEditing(panel) {
   cancelSessionEdit(panel);
   if (panel === 'offwork') renderOffwork(); else renderSettings();
 }
-function syncEditingSuppression() { void suppressionController.setDesired('editing', Boolean(isEditableEditing(sessions.offwork) || isEditableEditing(sessions.settings) || editingTodoId || isEditableEditing(sessions.meeting) || isEditableEditing(sessions.reminder) || sessions.persona?.dirty)); }
+function syncEditingSuppression() { void suppressionController.setDesired('editing', Boolean(isEditableEditing(sessions.offwork) || isEditableEditing(sessions.settings) || editingTodoId || isEditableEditing(sessions.meeting) || isEditableEditing(sessions.reminder) || sessions.manualFocus?.dirty || sessions.persona?.dirty)); }
 function isTypingControl(element) { const nonTyping = ['button', 'checkbox', 'color', 'file', 'radio', 'range', 'reset', 'submit']; return element instanceof HTMLInputElement && !nonTyping.includes(element.type) || element?.tagName === 'TEXTAREA' || element instanceof HTMLElement && element.isContentEditable; }
 
 $('#alarmPose').innerHTML = PET_POSES.map(({ value, label }) => `<option value="${value}">${label}</option>`).join('');
@@ -960,6 +980,44 @@ $('#alarmForm').onsubmit = async (event) => {
   const commandPayload = draft.id ? { id: draft.id, patch: payload } : { ...payload, enabled: true };
   try { const next = await sendCommand(draft.id ? 'alarm:update' : 'alarm:add', commandPayload); if (!isCurrentSave('reminder', epoch)) return; completeSessionSave('reminder', { ...draft, ...payload, enabled: draft.id ? draft.enabled : true }); selectedAlarmId = null; render(next); }
   catch { if (!isCurrentSave('reminder', epoch)) return; failSessionSave('reminder', '保存失败，请重试'); renderReminderEditor(); }
+};
+
+$('#manualFocusTodo').onchange = (event) => editSession('manualFocus', { todoId: event.target.value });
+$('#manualFocusStart').oninput = (event) => editSession('manualFocus', { startedAt: event.target.value });
+$('#manualFocusEnd').oninput = (event) => editSession('manualFocus', { endedAt: event.target.value });
+$('#manualFocusForm').onsubmit = async (event) => {
+  event.preventDefault();
+  const draft = sessions.manualFocus.draft;
+  const startedAt = new Date(draft.startedAt).getTime();
+  const endedAt = new Date(draft.endedAt).getTime();
+  if (!Number.isFinite(startedAt) || !Number.isFinite(endedAt) || endedAt <= startedAt) {
+    failSessionSave('manualFocus', '结束时间要晚于开始时间');
+    renderManualFocus();
+    return;
+  }
+  const epoch = startSessionSave('manualFocus');
+  if (epoch == null) return;
+  renderManualFocus();
+  try {
+    const next = await sendCommand('focus:manual:add', { todoId: draft.todoId || undefined, startedAt, endedAt });
+    if (!isCurrentSave('manualFocus', epoch)) return;
+    const actual = next.manualFocus?.spentMs || 0;
+    manualFocusNotice = next.manualFocus?.trimmed ? `已保存未重叠的 ${spentText(actual)}` : `已保存 ${spentText(actual)}`;
+    sessions.manualFocus = draftSaveSucceeded(sessions.manualFocus, blankManualFocus(next));
+    reportDirty();
+    render(next);
+  } catch (error) {
+    if (!isCurrentSave('manualFocus', epoch)) return;
+    const message = error?.message === 'manual_focus_overlaps_existing'
+      ? '这段时间已被已有专注记录覆盖'
+      : error?.message === 'manual_focus_in_future'
+        ? '补记结束时间不能晚于现在'
+        : error?.message === 'manual_focus_cross_day'
+          ? '补记请限制在同一天内'
+          : '保存失败，请重试';
+    failSessionSave('manualFocus', message);
+    renderManualFocus();
+  }
 };
 
 $('#newMeeting').onclick = () => openMeeting();

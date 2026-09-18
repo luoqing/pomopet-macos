@@ -81,4 +81,74 @@ describe('ActivityLedger', () => {
     expect(ledger.recordFinalizedInterval(interval, rules)).toBe(false);
     expect(ledger.snapshot().days['2026-09-04'].intervals.filter((item) => item.cycleId === 'focus-1')).toHaveLength(1);
   });
+
+  it('records a manual focus interval with a manual source', () => {
+    const ledger = new ActivityLedger();
+
+    expect(ledger.recordManualFocus({
+      sourceId: 'manual:1',
+      taskTitle: '补记方案整理',
+      startedAt: at('2026-09-04', '10:00'),
+      endedAt: at('2026-09-04', '10:30')
+    }, rules)).toEqual({
+      intervals: [expect.objectContaining({
+        kind: 'focus',
+        source: 'manual',
+        taskTitle: '补记方案整理',
+        segments: [{ startedAt: at('2026-09-04', '10:00'), endedAt: at('2026-09-04', '10:30') }]
+      })],
+      spentMs: 30 * 60_000
+    });
+  });
+
+  it('keeps only the non-overlapping fragments when manual focus overlaps timer focus', () => {
+    const ledger = new ActivityLedger();
+    ledger.recordFinalizedInterval({
+      id: 'timer:1',
+      cycleId: 'timer:1',
+      kind: 'focus',
+      startedAt: at('2026-09-04', '10:10'),
+      endedAt: at('2026-09-04', '10:20'),
+      segments: [{ startedAt: at('2026-09-04', '10:10'), endedAt: at('2026-09-04', '10:20') }],
+      status: 'stopped',
+      completionReason: 'stopped'
+    }, rules);
+
+    expect(ledger.recordManualFocus({
+      sourceId: 'manual:2',
+      taskTitle: '补记方案整理',
+      startedAt: at('2026-09-04', '10:00'),
+      endedAt: at('2026-09-04', '10:30')
+    }, rules)).toEqual({
+      intervals: [expect.objectContaining({
+        source: 'manual',
+        segments: [
+          { startedAt: at('2026-09-04', '10:00'), endedAt: at('2026-09-04', '10:10') },
+          { startedAt: at('2026-09-04', '10:20'), endedAt: at('2026-09-04', '10:30') }
+        ]
+      })],
+      spentMs: 20 * 60_000
+    });
+  });
+
+  it('does not create a manual focus record when all of it overlaps existing focus', () => {
+    const ledger = new ActivityLedger();
+    ledger.recordFinalizedInterval({
+      id: 'timer:2',
+      cycleId: 'timer:2',
+      kind: 'focus',
+      startedAt: at('2026-09-04', '10:00'),
+      endedAt: at('2026-09-04', '10:30'),
+      segments: [{ startedAt: at('2026-09-04', '10:00'), endedAt: at('2026-09-04', '10:30') }],
+      status: 'completed',
+      completionReason: 'natural'
+    }, rules);
+
+    expect(ledger.recordManualFocus({
+      sourceId: 'manual:3',
+      startedAt: at('2026-09-04', '10:00'),
+      endedAt: at('2026-09-04', '10:30')
+    }, rules)).toBeNull();
+    expect(ledger.snapshot().days['2026-09-04'].intervals.filter((item) => item.source === 'manual')).toEqual([]);
+  });
 });
