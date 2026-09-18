@@ -23,9 +23,9 @@ test('control surface renders and completes browser fallback timer flow', async 
   await expect(page.locator('.todo-item')).toHaveCount(1);
   await expect(page.locator('#todoStats')).toContainText('计划 2 番茄');
   await expect(page.locator('#task')).toHaveText('完成S级评论需求的代码CR和测试');
-  await page.getByRole('button', { name: '开始专注', exact: true }).click(); await expect(page.getByRole('button', { name: '暂停' })).toBeVisible();
+  await page.getByRole('button', { name: '开始专注', exact: true }).click(); await expect(page.locator('#mainAction')).toHaveText('暂停');
   await expect(page.locator('#clock')).toHaveText(/^24:5[89]$/);
-  await page.getByRole('button', { name: '暂停' }).click(); await expect(page.getByRole('button', { name: '继续' })).toBeVisible();
+  await page.locator('#mainAction').click(); await expect(page.locator('#mainAction')).toHaveText('继续');
   await page.getByRole('tab', { name: '提醒计划', exact: true }).click(); await page.getByRole('button', { name: '新建提醒' }).click();
   await expect(page.getByPlaceholder('提醒内容')).toBeVisible(); await expect(page.locator('#alarmWhen')).toHaveAttribute('type', 'datetime-local');
   await expect(page.locator('#alarmPose option')).toHaveCount(12);
@@ -797,7 +797,7 @@ test('reminder edit click survives a state tick between pointer down and up', as
   await expect(page.locator('.alarm-item')).toHaveClass(/selected/);
   expect(await page.evaluate(() => globalThis.__reminderEditNode === document.querySelector('.alarm-edit'))).toBe(false);
   await page.locator('#alarmLabel').fill('活动活动 预防病痛');
-  await page.locator('.editor-heading').click();
+  await page.locator('#alarmForm .editor-heading').click();
   await page.evaluate(() => globalThis.__emitReminderTick());
   await page.locator('#alarmLabel').click(); await page.locator('#alarmLabel').press('End'); await page.locator('#alarmLabel').pressSequentially(' 活到99');
   await expect(page.locator('#alarmLabel')).toHaveValue('活动活动 预防病痛 活到99');
