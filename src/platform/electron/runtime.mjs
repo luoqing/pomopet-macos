@@ -150,7 +150,12 @@ export class AppRuntime {
     if (name === 'todo:start') {
       const todo = this.todos.unfinishedItem(payload.id);
       if (!todo) throw new Error('todo_unavailable');
-      events = this.timer.start({ task: todo.title, todoId: todo.id, focusMinutes: payload.focusMinutes, breakMinutes: payload.breakMinutes });
+      events = this.timer.start({
+        task: todo.title,
+        todoId: todo.id,
+        focusMinutes: payload.focusMinutes ?? todo.focusMinutes ?? undefined,
+        breakMinutes: payload.breakMinutes
+      });
       this.todos.activate(todo.id);
     }
     if (name === 'alarm:add') this.alarms.add(payload);

@@ -239,6 +239,21 @@ describe('AppRuntime', () => {
     expect(runtime.view().todos.items[0].done).toBe(true);
   });
 
+  it('starts a Todo with its configured focus duration when no override is supplied', async () => {
+    const clock = new FakeClock(1_000); const runtime = new AppRuntime({ store: new MemoryStore(), clock }); await runtime.init();
+    await runtime.command('todo:add', { title: '完成评审', focusMinutes: 50 });
+    const todoId = runtime.view().todos.activeId;
+
+    await runtime.command('todo:start', { id: todoId, breakMinutes: 5 });
+
+    expect(runtime.view().timer).toMatchObject({
+      status: 'running',
+      todoId,
+      focusMs: 50 * 60_000,
+      remainingMs: 50 * 60_000
+    });
+  });
+
   it('persists a pending break choice across restart and never starts focus automatically', async () => {
     const clock = new FakeClock(1_000); const store = new MemoryStore();
     const runtime = new AppRuntime({ store, clock }); await runtime.init();

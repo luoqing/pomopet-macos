@@ -7,7 +7,7 @@ const tonePresets = { comfort: 'gentle', sarcastic: 'witty', angry: 'witty', cut
 export const migrateTo016 = (data = {}, now = Date.now()) => {
   const migrated = structuredClone(data || {});
   const items = (migrated.todos?.items || []).map((item, index) => ({
-    priority: 'P1', estimatePomos: 1, completedPomos: 0, spentMs: 0, done: false, createdAt: now + index, completedAt: null,
+    priority: 'P1', estimatePomos: 1, focusMinutes: null, completedPomos: 0, spentMs: 0, done: false, createdAt: now + index, completedAt: null,
     ...item
   }));
   let activeId = migrated.todos?.activeId ?? null;

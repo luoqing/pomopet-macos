@@ -382,7 +382,7 @@ test('todo list add, enter and delete update immediately while preserving active
   await expect(page.locator('.todo-item')).toHaveCount(0);
 });
 
-test('an unfinished Todo can start the selected Pomodoro preset directly', async ({ page }) => {
+test('an unfinished Todo keeps its configured focus duration when the global preset changes', async ({ page }) => {
   await page.goto('/');
   await page.locator('#todoTitle').fill('直接开始这件事');
   await page.locator('#addTodo').click();
@@ -391,9 +391,92 @@ test('an unfinished Todo can start the selected Pomodoro preset directly', async
   await page.locator('.todo-start').click();
 
   await expect(page.locator('#phase')).toHaveText('末末陪你专注中');
-  await expect(page.locator('#clock')).toHaveText(/^(50:00|49:5[89])$/);
+  await expect(page.locator('#clock')).toHaveText(/^(25:00|24:5[89])$/);
   await expect(page.locator('#task')).toHaveText('直接开始这件事');
-  await expect(page.locator('.todo-start')).toBeDisabled();
+  await expect(page.getByRole('button', { name: '暂停专注 直接开始这件事' })).toBeEnabled();
+});
+
+test('the active Todo toggles between start, pause, and resume with its configured duration', async ({ page }) => {
+  await page.addInitScript(() => {
+    const state = {
+      now: Date.now(),
+      timer: { status: 'idle', phase: 'focus', remainingMs: 25 * 60_000, targetAt: null, todoId: null, todayCount: 0 },
+      todos: { activeId: 'review', items: [{ id: 'review', title: '完成设计评审', priority: 'P1', estimatePomos: 2, focusMinutes: 50, completedPomos: 0, spentMs: 0, done: false }] },
+      alarms: [], review: { days: [] }, offwork: { enabled: false, time: '18:30', weekdays: [] },
+      persona: { preset: 'gentle', petName: '末末', ownerName: '主人', customPrompt: '', teaseLevel: 35, chatFrequency: 'occasional' },
+      settings: { preset: '25/5', customFocus: 25, customBreak: 5, voiceMode: 'off' }
+    };
+    const listeners = []; const commands = []; const copy = (value) => JSON.parse(JSON.stringify(value));
+    const emit = () => listeners.forEach((callback) => callback(copy(state)));
+    globalThis.__todoControlCommands = commands;
+    globalThis.pomopet = {
+      getState: async () => copy(state),
+      command: async (name, payload) => {
+        commands.push({ name, payload });
+        if (name === 'todo:start') state.timer = { ...state.timer, status: 'running', todoId: payload.id, task: state.todos.items[0].title, remainingMs: payload.focusMinutes * 60_000, targetAt: state.now + payload.focusMinutes * 60_000 };
+        if (name === 'timer:pause') state.timer = { ...state.timer, status: 'paused', targetAt: null };
+        if (name === 'timer:resume') state.timer = { ...state.timer, status: 'running', targetAt: state.now + state.timer.remainingMs };
+        emit();
+        return copy(state);
+      },
+      onState: (callback) => { listeners.push(callback); return () => {}; },
+      setDirty: () => {}, onDiscardDrafts: () => () => {}, showControl: () => {}
+    };
+  });
+
+  await page.goto('/');
+  const control = page.getByRole('button', { name: '开始专注 完成设计评审' });
+  await control.click();
+  await expect.poll(() => page.evaluate(() => globalThis.__todoControlCommands.at(-1))).toEqual({
+    name: 'todo:start', payload: { id: 'review', focusMinutes: 50, breakMinutes: 5 }
+  });
+  await expect(page.getByRole('button', { name: '暂停专注 完成设计评审' })).toBeVisible();
+  await page.getByRole('button', { name: '暂停专注 完成设计评审' }).click();
+  await expect.poll(() => page.evaluate(() => globalThis.__todoControlCommands.at(-1))).toEqual({ name: 'timer:pause', payload: undefined });
+  await expect(page.getByRole('button', { name: '继续专注 完成设计评审' })).toBeVisible();
+  await page.getByRole('button', { name: '继续专注 完成设计评审' }).click();
+  await expect.poll(() => page.evaluate(() => globalThis.__todoControlCommands.at(-1))).toEqual({ name: 'timer:resume', payload: undefined });
+});
+
+test('quick Todo creation saves its configured focus duration without losing priority or pomodoro estimate', async ({ page }) => {
+  await page.addInitScript(() => {
+    const state = {
+      now: Date.now(),
+      timer: { status: 'idle', phase: 'focus', remainingMs: 25 * 60_000, targetAt: null, todayCount: 0 },
+      todos: { activeId: null, items: [] }, alarms: [], review: { days: [] },
+      offwork: { enabled: false, time: '18:30', weekdays: [] },
+      persona: { preset: 'gentle', petName: '末末', ownerName: '主人', customPrompt: '', teaseLevel: 35, chatFrequency: 'occasional' },
+      settings: { preset: '25/5', customFocus: 25, customBreak: 5, voiceMode: 'off' }
+    };
+    const listeners = []; const commands = []; const copy = (value) => JSON.parse(JSON.stringify(value));
+    globalThis.__quickTodoCommands = commands;
+    globalThis.pomopet = {
+      getState: async () => copy(state),
+      command: async (name, payload) => {
+        commands.push({ name, payload });
+        if (name === 'todo:add') {
+          const item = { id: 'quick-todo', ...payload, completedPomos: 0, spentMs: 0, done: false };
+          state.todos = { activeId: item.id, items: [item] };
+        }
+        listeners.forEach((callback) => callback(copy(state)));
+        return copy(state);
+      },
+      onState: (callback) => { listeners.push(callback); return () => {}; },
+      setDirty: () => {}, onDiscardDrafts: () => () => {}, showControl: () => {}
+    };
+  });
+
+  await page.goto('/');
+  await page.locator('#todoTitle').fill('整理评审结论');
+  await page.locator('#todoPriority').selectOption('P0');
+  await page.locator('#todoEstimate').fill('3');
+  await page.locator('#todoFocusMinutes').fill('50');
+  await page.locator('#addTodo').click();
+
+  await expect.poll(() => page.evaluate(() => [...globalThis.__quickTodoCommands].reverse().find(({ name }) => name === 'todo:add'))).toEqual({
+    name: 'todo:add',
+    payload: { title: '整理评审结论', priority: 'P0', estimatePomos: 3, focusMinutes: 50 }
+  });
 });
 
 test('reminder templates fill only the draft and interval save sends the supported payload', async ({ page }) => {

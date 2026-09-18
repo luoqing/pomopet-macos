@@ -44,4 +44,14 @@ describe('TodoLedger recommendations', () => {
 
     expect(ledger.unfinishedItem(todo.id)).toMatchObject({ spentMs: 35 * 60_000, completedPomos: 1 });
   });
+
+  it('stores a per-task focus duration and normalizes invalid values', () => {
+    const clock = new FakeClock(Date.parse('2026-08-28T10:00:00+08:00'));
+    const ledger = new TodoLedger(clock);
+    const todo = ledger.add({ title: '写方案', focusMinutes: 50 });
+
+    expect(todo.focusMinutes).toBe(50);
+    expect(ledger.update(todo.id, { focusMinutes: 0 })).toMatchObject({ focusMinutes: 1 });
+    expect(ledger.update(todo.id, { focusMinutes: 999 })).toMatchObject({ focusMinutes: 180 });
+  });
 });

@@ -251,7 +251,7 @@ a {
 }
 .todo-entry {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 92px 68px 38px;
+  grid-template-columns: minmax(0, 1fr) 92px 62px 62px 38px;
   gap: 8px;
   align-items: center;
   padding-bottom: 12px;
@@ -276,7 +276,8 @@ a {
   border-color: var(--green);
   box-shadow: 0 0 0 2px rgba(113, 146, 108, 0.12);
 }
-.todo-estimate-field {
+.todo-estimate-field,
+.todo-focus-field {
   display: flex;
   align-items: center;
   border: 1px solid rgba(111, 78, 56, 0.18);
@@ -284,13 +285,15 @@ a {
   background: rgba(255, 253, 248, 0.9);
   overflow: hidden;
 }
-.todo-estimate-field input {
+.todo-estimate-field input,
+.todo-focus-field input {
   width: 42px;
   border: 0;
   background: transparent;
   box-shadow: none;
 }
-.todo-estimate-field span {
+.todo-estimate-field span,
+.todo-focus-field span {
   color: var(--muted);
   font-size: 11px;
 }
@@ -421,8 +424,8 @@ a {
 .todo-edit,
 .todo-remove,
 .todo-start {
-  width: 26px;
-  height: 26px;
+  width: 32px;
+  height: 32px;
   padding: 0;
   border: 0;
   border-radius: 50%;
@@ -439,7 +442,7 @@ a {
 }
 .todo-start {
   color: var(--green);
-  font-size: 12px;
+  font-size: 14px;
 }
 .todo-start:disabled {
   opacity: 0.35;
@@ -459,6 +462,9 @@ a {
 }
 .todo-estimate {
   width: 46px;
+}
+.todo-focus-minutes {
+  width: 50px;
 }
 .todo-edit-actions {
   display: flex;
@@ -1545,7 +1551,7 @@ footer {
     line-height: 1.35;
   }
   .todo-entry {
-    grid-template-columns: minmax(0, 1fr) 68px 38px;
+    grid-template-columns: 68px 62px 62px 38px;
   }
   #todoTitle {
     grid-column: 1 / -1;
