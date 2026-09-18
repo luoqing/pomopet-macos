@@ -95,7 +95,9 @@ export class AppRuntime {
     this.activity = new ActivityLedger(this.data.analytics);
     this.alarms = new AlarmScheduler(this.clock, this.data.alarms, new OccurrenceLedger(this.data.ledger));
     this.copy = new CopyPicker(this.data.copyLast, this.random); this.offwork = new OffworkScheduler(this.clock, this.data.offwork);
-    await this.#handle(this.timer.tick({ recovery: true })); await this.persist(); this.emit();
+    await this.#handle(this.timer.tick({ recovery: true }));
+    this.#markMissedScheduledPlans();
+    await this.persist(); this.emit();
   }
   view() {
     const timer = this.timer.snapshot();
@@ -109,6 +111,7 @@ export class AppRuntime {
     settings.aiKeyConfigured = Boolean(String(this.data.settings.aiApiKey || '').trim());
     return { timer: { ...timer, remainingMs: this.timer.remaining(), todayCount: timer.completedByDay[localDayKey(this.clock.now())] || 0 },
       breakContinuation: this.#breakContinuation(),
+      scheduledStartConflict: this.#scheduledStartConflict(),
       todos: { ...todos, items: todos.items.filter((item) => item.day === day) }, alarms: this.alarms.snapshot().alarms,
       review: reviewRecentDays({
         analytics: this.activity.snapshot(),
@@ -121,7 +124,9 @@ export class AppRuntime {
   }
   emit() { this.onState(this.view()); }
   async tick() {
-    await this.#handle([...this.timer.tick(), ...this.alarms.due(), ...this.offwork.tick(), ...this.#ambientDue()]);
+    const timerEvents = this.timer.tick();
+    const planEvents = this.#startDuePlannedTodo();
+    await this.#handle([...timerEvents, ...planEvents, ...this.alarms.due(), ...this.offwork.tick(), ...this.#ambientDue()]);
     if (this.alarms.consumeDirty()) this.dirty = true;
     this.emit();
     if (this.dirty) await this.persist();
@@ -131,7 +136,7 @@ export class AppRuntime {
     if (name === 'timer:start') events = this.timer.start(payload);
     if (name === 'timer:pause') events = this.timer.pause();
     if (name === 'timer:resume') events = this.timer.resume();
-    if (name === 'timer:stop') events = this.timer.stop();
+    if (name === 'timer:stop') events = [...this.timer.stop(), ...this.#startDuePlannedTodo()];
     if (name === 'timer:complete') events = this.timer.complete();
     if (name === 'timer:endBreak') events = this.timer.endBreak();
     if (name === 'timer:skipBreak') events = this.timer.skipBreak();
@@ -157,6 +162,16 @@ export class AppRuntime {
         breakMinutes: payload.breakMinutes
       });
       this.todos.activate(todo.id);
+    }
+    if (name === 'todo:plan:continue') {
+      const todo = this.#scheduledTodo(payload.id);
+      if (!todo || todo.scheduledStatus !== 'conflict') throw new Error('scheduled_plan_unavailable');
+      this.todos.setScheduledStatus(todo.id, 'deferred');
+    }
+    if (name === 'todo:plan:switch') {
+      const todo = this.#scheduledTodo(payload.id);
+      if (!todo || todo.scheduledStatus !== 'conflict') throw new Error('scheduled_plan_unavailable');
+      events = [...this.timer.stop(), ...this.#startPlannedTodo(todo)];
     }
     if (name === 'alarm:add') this.alarms.add(payload);
     if (name === 'alarm:update') this.alarms.update(payload.id, payload.patch);
@@ -392,6 +407,60 @@ export class AppRuntime {
     const recommendedTodoId = choices[0]?.id || null;
     return { ...pending, canContinue, recommendedTodoId, choices,
       actions: { continue: canContinue, choose: choices.length > 0, idle: true, addTodo: !canContinue && choices.length === 0 } };
+  }
+  #scheduledTodo(id) {
+    return this.todos.unfinishedItem(id) || null;
+  }
+  #scheduledStartConflict() {
+    const todo = this.todos.snapshot().items
+      .filter((item) => item.scheduledStatus === 'conflict' && !item.done)
+      .sort((left, right) => left.scheduledStartAt - right.scheduledStartAt || left.createdAt - right.createdAt)[0];
+    return todo ? { id: todo.id, todoId: todo.id, title: todo.title, scheduledStartAt: todo.scheduledStartAt } : null;
+  }
+  #breakMinutes() {
+    if (this.data.settings.preset === '50/10') return 10;
+    if (this.data.settings.preset === 'custom') return Math.min(60, Math.max(1, Number(this.data.settings.customBreak) || 5));
+    return 5;
+  }
+  #markMissedScheduledPlans() {
+    const now = this.clock.now();
+    for (const todo of this.todos.snapshot().items) {
+      if (!todo.done && todo.scheduledStatus === 'pending' && todo.scheduledStartAt <= now) this.todos.setScheduledStatus(todo.id, 'missed');
+    }
+  }
+  #startDuePlannedTodo() {
+    const now = this.clock.now();
+    const timer = this.timer.snapshot();
+    const plannedTodos = this.todos.snapshot().items.filter((todo) => !todo.done && todo.scheduledStartAt <= now);
+    const deferred = plannedTodos
+      .filter((todo) => todo.scheduledStatus === 'deferred' && !(timer.phase === 'focus' && ['running', 'paused'].includes(timer.status)))
+      .sort((left, right) => left.scheduledStartAt - right.scheduledStartAt || left.createdAt - right.createdAt);
+    if (deferred.length) {
+      deferred.forEach((todo) => this.todos.setScheduledStatus(todo.id, 'conflict'));
+      return [];
+    }
+    const due = plannedTodos
+      .filter((todo) => todo.scheduledStatus === 'pending')
+      .sort((left, right) => left.scheduledStartAt - right.scheduledStartAt || left.createdAt - right.createdAt);
+    if (!due.length) return [];
+    const planned = due[0];
+    if (['idle', 'stopped'].includes(timer.status) && !timer.pendingBreakChoice) return this.#startPlannedTodo(planned);
+    if (timer.todoId === planned.id && ['running', 'paused'].includes(timer.status)) {
+      this.todos.setScheduledStatus(planned.id, 'started');
+      return [];
+    }
+    due.forEach((todo) => this.todos.setScheduledStatus(todo.id, 'conflict'));
+    return [];
+  }
+  #startPlannedTodo(todo) {
+    this.todos.setScheduledStatus(todo.id, 'started');
+    this.todos.activate(todo.id);
+    return this.timer.start({
+      task: todo.title,
+      todoId: todo.id,
+      focusMinutes: todo.focusMinutes ?? undefined,
+      breakMinutes: this.#breakMinutes()
+    });
   }
   #requireBreakChoice() {
     const pending = this.timer.snapshot().pendingBreakChoice;

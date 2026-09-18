@@ -217,6 +217,33 @@ a {
 .break-chooser {
   margin-top: 8px;
 }
+.planned-todo-conflict {
+  display: grid;
+  gap: 9px;
+  margin-top: 12px;
+  padding: 11px 12px;
+  border: 1px solid rgba(185, 68, 52, 0.24);
+  border-left: 3px solid var(--tomato);
+  border-radius: 7px;
+  background: rgba(255, 244, 239, 0.86);
+  color: var(--ink);
+  font-size: 12px;
+}
+.planned-todo-conflict strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.planned-todo-conflict > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+.planned-todo-conflict button {
+  min-height: 30px;
+  padding: 6px 9px;
+  font-size: 11px;
+}
 .todo-panel {
   margin-top: 18px;
   padding: 16px 0 0;
@@ -465,6 +492,9 @@ a {
 }
 .todo-focus-minutes {
   width: 50px;
+}
+.todo-scheduled-start {
+  max-width: 172px;
 }
 .todo-edit-actions {
   display: flex;

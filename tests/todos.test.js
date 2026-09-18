@@ -54,4 +54,14 @@ describe('TodoLedger recommendations', () => {
     expect(ledger.update(todo.id, { focusMinutes: 0 })).toMatchObject({ focusMinutes: 1 });
     expect(ledger.update(todo.id, { focusMinutes: 999 })).toMatchObject({ focusMinutes: 180 });
   });
+
+  it('stores a one-shot planned start and clears its state with the timestamp', () => {
+    const clock = new FakeClock(Date.parse('2026-09-21T09:00:00+08:00'));
+    const ledger = new TodoLedger(clock);
+    const scheduledStartAt = clock.now() + 90 * 60_000;
+    const todo = ledger.add({ title: '准备评审', scheduledStartAt });
+
+    expect(todo).toMatchObject({ scheduledStartAt, scheduledStatus: 'pending' });
+    expect(ledger.update(todo.id, { scheduledStartAt: null })).toMatchObject({ scheduledStartAt: null, scheduledStatus: 'none' });
+  });
 });

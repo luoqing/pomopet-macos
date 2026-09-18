@@ -479,6 +479,75 @@ test('quick Todo creation saves its configured focus duration without losing pri
   });
 });
 
+test('a planned Todo conflict offers explicit continue or switch actions', async ({ page }) => {
+  await page.addInitScript(() => {
+    const scheduledStartAt = new Date(2026, 8, 21, 10, 0).getTime();
+    const state = {
+      now: scheduledStartAt,
+      timer: { status: 'running', phase: 'focus', task: '当前任务', todoId: 'current', remainingMs: 24 * 60_000, targetAt: scheduledStartAt + 24 * 60_000, todayCount: 0 },
+      todos: { activeId: 'current', items: [
+        { id: 'current', title: '当前任务', priority: 'P1', estimatePomos: 1, focusMinutes: 25, completedPomos: 0, spentMs: 60_000, done: false },
+        { id: 'planned', title: '计划中的评审', priority: 'P0', estimatePomos: 2, focusMinutes: 50, scheduledStartAt, scheduledStatus: 'conflict', completedPomos: 0, spentMs: 0, done: false }
+      ] },
+      scheduledStartConflict: { todoId: 'planned', title: '计划中的评审', scheduledStartAt },
+      alarms: [], review: { days: [] }, offwork: { enabled: false, time: '18:30', weekdays: [] },
+      persona: { preset: 'gentle', petName: '末末', ownerName: '主人', customPrompt: '', teaseLevel: 35, chatFrequency: 'occasional' },
+      settings: { preset: '25/5', customFocus: 25, customBreak: 5, voiceMode: 'off' }
+    };
+    const commands = []; const copy = (value) => JSON.parse(JSON.stringify(value));
+    globalThis.__plannedConflictCommands = commands;
+    globalThis.pomopet = {
+      getState: async () => copy(state), onState: () => () => {},
+      command: async (name, payload) => { commands.push({ name, payload }); return copy(state); },
+      setDirty: () => {}, onDiscardDrafts: () => () => {}, showControl: () => {}
+    };
+  });
+
+  await page.goto('/');
+  await expect(page.getByRole('status', { name: '计划任务冲突' })).toContainText('计划中的评审');
+  await page.getByRole('button', { name: '继续当前任务' }).click();
+  await expect.poll(() => page.evaluate(() => globalThis.__plannedConflictCommands.find(({ name }) => name === 'todo:plan:continue'))).toEqual({
+    name: 'todo:plan:continue', payload: { id: 'planned' }
+  });
+  await page.getByRole('button', { name: '切换并开始计划任务' }).click();
+  await expect.poll(() => page.evaluate(() => globalThis.__plannedConflictCommands.find(({ name }) => name === 'todo:plan:switch'))).toEqual({
+    name: 'todo:plan:switch', payload: { id: 'planned' }
+  });
+});
+
+test('Todo editing saves an optional planned start time', async ({ page }) => {
+  await page.addInitScript(() => {
+    const state = {
+      now: new Date(2026, 8, 21, 9, 0).getTime(),
+      timer: { status: 'idle', phase: 'focus', remainingMs: 25 * 60_000, targetAt: null, todayCount: 0 },
+      todos: { activeId: 'plan', items: [{ id: 'plan', title: '准备评审', priority: 'P1', estimatePomos: 2, focusMinutes: 50, scheduledStartAt: null, scheduledStatus: 'none', completedPomos: 0, spentMs: 0, done: false }] },
+      alarms: [], review: { days: [] }, offwork: { enabled: false, time: '18:30', weekdays: [] },
+      persona: { preset: 'gentle', petName: '末末', ownerName: '主人', customPrompt: '', teaseLevel: 35, chatFrequency: 'occasional' },
+      settings: { preset: '25/5', customFocus: 25, customBreak: 5, voiceMode: 'off' }
+    };
+    const commands = []; const copy = (value) => JSON.parse(JSON.stringify(value));
+    globalThis.__plannedTodoEditCommands = commands;
+    globalThis.pomopet = {
+      getState: async () => copy(state), onState: () => () => {},
+      command: async (name, payload) => { commands.push({ name, payload }); return copy(state); },
+      setDirty: () => {}, onDiscardDrafts: () => () => {}, showControl: () => {}
+    };
+  });
+
+  await page.goto('/');
+  await page.getByRole('button', { name: '编辑 准备评审' }).click();
+  await page.getByLabel('计划开始时间').fill('2026-09-21T10:30');
+  await page.locator('.todo-save').click();
+
+  await expect.poll(() => page.evaluate(() => globalThis.__plannedTodoEditCommands.find(({ name }) => name === 'todo:update'))).toEqual({
+    name: 'todo:update',
+    payload: expect.objectContaining({
+      id: 'plan',
+      patch: expect.objectContaining({ scheduledStartAt: new Date(2026, 8, 21, 10, 30).getTime() })
+    })
+  });
+});
+
 test('reminder templates fill only the draft and interval save sends the supported payload', async ({ page }) => {
   await page.addInitScript(() => {
     const state = {

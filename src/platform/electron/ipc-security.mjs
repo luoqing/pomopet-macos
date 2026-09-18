@@ -1,7 +1,7 @@
 const CONTROL_COMMANDS = new Set([
   'timer:start', 'timer:pause', 'timer:resume', 'timer:stop', 'timer:complete', 'timer:endBreak', 'timer:skipBreak', 'timer:updateTask',
   'break:continue', 'break:switch', 'break:idle',
-  'todo:add', 'todo:update', 'todo:remove', 'todo:active', 'todo:toggle', 'todo:start',
+  'todo:add', 'todo:update', 'todo:remove', 'todo:active', 'todo:toggle', 'todo:start', 'todo:plan:continue', 'todo:plan:switch',
   'alarm:add', 'alarm:update', 'alarm:remove', 'alarm:enabled', 'alarm:snooze', 'alarm:dismiss',
   'meeting:add', 'meeting:update', 'meeting:remove', 'meeting:enabled',
   'offwork:update', 'offwork:snooze', 'offwork:dismiss',

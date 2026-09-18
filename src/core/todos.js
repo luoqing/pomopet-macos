@@ -3,9 +3,19 @@ import { localDayKey } from './time.js';
 const newId = (now) => `todo-${now}-${Math.random().toString(36).slice(2, 8)}`;
 const priorities = new Set(['P0', 'P1', 'P2']);
 const priorityOrder = { P0: 0, P1: 1, P2: 2 };
+const scheduledStatuses = new Set(['none', 'pending', 'conflict', 'deferred', 'missed', 'started']);
 const normalizeFocusMinutes = (value, fallback = null) => {
   if (value == null || value === '') return fallback;
   return Math.min(180, Math.max(1, Number(value) || 1));
+};
+const normalizeScheduledStartAt = (value) => {
+  if (value == null || value === '') return null;
+  const timestamp = Number(value);
+  return Number.isFinite(timestamp) ? timestamp : null;
+};
+const normalizeScheduledStatus = (value, scheduledStartAt) => {
+  if (!scheduledStartAt) return 'none';
+  return scheduledStatuses.has(value) && value !== 'none' ? value : 'pending';
 };
 
 export const createTodoState = () => ({ items: [], activeId: null, appliedEventIds: {} });
@@ -49,10 +59,11 @@ export class TodoLedger {
     return this.orderedUnfinished(options)[0] || null;
   }
 
-  add({ title = '', priority = 'P1', estimatePomos = 1, focusMinutes = null } = {}) {
+  add({ title = '', priority = 'P1', estimatePomos = 1, focusMinutes = null, scheduledStartAt = null, scheduledStatus = 'pending' } = {}) {
     const cleanTitle = String(title).trim();
     if (!cleanTitle) throw new Error('todo_title_required');
     const now = this.clock.now();
+    const normalizedScheduledStartAt = normalizeScheduledStartAt(scheduledStartAt);
     const item = {
       id: newId(now),
       day: localDayKey(now),
@@ -60,6 +71,8 @@ export class TodoLedger {
       priority: priorities.has(priority) ? priority : 'P1',
       estimatePomos: Math.min(12, Math.max(1, Number(estimatePomos) || 1)),
       focusMinutes: normalizeFocusMinutes(focusMinutes),
+      scheduledStartAt: normalizedScheduledStartAt,
+      scheduledStatus: normalizeScheduledStatus(scheduledStatus, normalizedScheduledStartAt),
       completedPomos: 0,
       spentMs: 0,
       done: false,
@@ -81,6 +94,19 @@ export class TodoLedger {
     if (Object.hasOwn(patch, 'priority') && priorities.has(patch.priority)) item.priority = patch.priority;
     if (Object.hasOwn(patch, 'estimatePomos')) item.estimatePomos = Math.min(12, Math.max(1, Number(patch.estimatePomos) || item.estimatePomos));
     if (Object.hasOwn(patch, 'focusMinutes')) item.focusMinutes = normalizeFocusMinutes(patch.focusMinutes);
+    if (Object.hasOwn(patch, 'scheduledStartAt')) {
+      item.scheduledStartAt = normalizeScheduledStartAt(patch.scheduledStartAt);
+      item.scheduledStatus = normalizeScheduledStatus(patch.scheduledStatus, item.scheduledStartAt);
+    } else if (Object.hasOwn(patch, 'scheduledStatus')) {
+      item.scheduledStatus = normalizeScheduledStatus(patch.scheduledStatus, item.scheduledStartAt);
+    }
+    return item;
+  }
+
+  setScheduledStatus(id, status) {
+    const item = this.state.items.find((todo) => todo.id === id);
+    if (!item) return null;
+    item.scheduledStatus = normalizeScheduledStatus(status, item.scheduledStartAt);
     return item;
   }
 

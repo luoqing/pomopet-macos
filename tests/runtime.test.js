@@ -254,6 +254,99 @@ describe('AppRuntime', () => {
     });
   });
 
+  it('starts a planned Todo when its scheduled time arrives while the timer is idle', async () => {
+    const now = new Date(2026, 8, 21, 10, 0).getTime();
+    const clock = new FakeClock(now); const runtime = new AppRuntime({ store: new MemoryStore(), clock }); await runtime.init();
+    await runtime.command('todo:add', { title: '计划中的评审', focusMinutes: 50, scheduledStartAt: now + 60_000 });
+    const todoId = runtime.view().todos.activeId;
+
+    clock.advance(60_000); await runtime.tick();
+
+    expect(runtime.view().timer).toMatchObject({ status: 'running', todoId, task: '计划中的评审', focusMs: 50 * 60_000 });
+    expect(runtime.view().todos.items[0]).toMatchObject({ scheduledStatus: 'started' });
+  });
+
+  it('holds a scheduled Todo for an explicit decision when another Todo is active', async () => {
+    const now = new Date(2026, 8, 21, 10, 0).getTime();
+    const clock = new FakeClock(now); const runtime = new AppRuntime({ store: new MemoryStore(), clock }); await runtime.init();
+    await runtime.command('todo:add', { title: '当前任务', focusMinutes: 25 });
+    const currentTodoId = runtime.view().todos.activeId;
+    await runtime.command('todo:add', { title: '计划任务', focusMinutes: 50, scheduledStartAt: now + 60_000 });
+    const plannedTodoId = runtime.view().todos.activeId;
+    await runtime.command('todo:start', { id: currentTodoId, breakMinutes: 5 });
+
+    clock.advance(60_000); await runtime.tick();
+
+    expect(runtime.view().timer).toMatchObject({ status: 'running', todoId: currentTodoId, task: '当前任务' });
+    expect(runtime.view().scheduledStartConflict).toMatchObject({ todoId: plannedTodoId, title: '计划任务', scheduledStartAt: now + 60_000 });
+    expect(runtime.view().todos.items.find((todo) => todo.id === plannedTodoId)).toMatchObject({ scheduledStatus: 'conflict' });
+  });
+
+  it('keeps the current Todo running when a conflicting plan is explicitly continued', async () => {
+    const now = new Date(2026, 8, 21, 10, 0).getTime();
+    const clock = new FakeClock(now); const runtime = new AppRuntime({ store: new MemoryStore(), clock }); await runtime.init();
+    await runtime.command('todo:add', { title: '当前任务', focusMinutes: 25 });
+    const currentTodoId = runtime.view().todos.activeId;
+    await runtime.command('todo:add', { title: '计划任务', focusMinutes: 50, scheduledStartAt: now + 60_000 });
+    const plannedTodoId = runtime.view().todos.activeId;
+    await runtime.command('todo:start', { id: currentTodoId, breakMinutes: 5 });
+    clock.advance(60_000); await runtime.tick();
+
+    await runtime.command('todo:plan:continue', { id: plannedTodoId });
+
+    expect(runtime.view().timer).toMatchObject({ status: 'running', todoId: currentTodoId, task: '当前任务' });
+    expect(runtime.view().scheduledStartConflict).toBeNull();
+    expect(runtime.view().todos.items.find((todo) => todo.id === plannedTodoId)).toMatchObject({ scheduledStatus: 'deferred', spentMs: 0 });
+  });
+
+  it('shows a deferred planned Todo again after the current focus round ends', async () => {
+    const now = new Date(2026, 8, 21, 10, 0).getTime();
+    const clock = new FakeClock(now); const runtime = new AppRuntime({ store: new MemoryStore(), clock }); await runtime.init();
+    await runtime.command('todo:add', { title: '当前任务', focusMinutes: 2 });
+    const currentTodoId = runtime.view().todos.activeId;
+    await runtime.command('todo:add', { title: '计划任务', focusMinutes: 50, scheduledStartAt: now + 60_000 });
+    const plannedTodoId = runtime.view().todos.activeId;
+    await runtime.command('todo:start', { id: currentTodoId, breakMinutes: 5 });
+    clock.advance(60_000); await runtime.tick();
+
+    await runtime.command('todo:plan:continue', { id: plannedTodoId });
+    expect(runtime.view().scheduledStartConflict).toBeNull();
+
+    clock.advance(60_000); await runtime.tick();
+    expect(runtime.view().timer).toMatchObject({ status: 'running', phase: 'break' });
+    expect(runtime.view().scheduledStartConflict).toMatchObject({ todoId: plannedTodoId });
+  });
+
+  it('switches to a conflicting planned Todo and records the elapsed current focus once', async () => {
+    const now = new Date(2026, 8, 21, 10, 0).getTime();
+    const clock = new FakeClock(now); const runtime = new AppRuntime({ store: new MemoryStore(), clock }); await runtime.init();
+    await runtime.command('todo:add', { title: '当前任务', focusMinutes: 25 });
+    const currentTodoId = runtime.view().todos.activeId;
+    await runtime.command('todo:add', { title: '计划任务', focusMinutes: 50, scheduledStartAt: now + 60_000 });
+    const plannedTodoId = runtime.view().todos.activeId;
+    await runtime.command('todo:start', { id: currentTodoId, breakMinutes: 5 });
+    clock.advance(2 * 60_000); await runtime.tick();
+
+    await runtime.command('todo:plan:switch', { id: plannedTodoId });
+
+    expect(runtime.view().timer).toMatchObject({ status: 'running', todoId: plannedTodoId, task: '计划任务', focusMs: 50 * 60_000 });
+    expect(runtime.view().todos.items.find((todo) => todo.id === currentTodoId)).toMatchObject({ spentMs: 2 * 60_000, completedPomos: 0 });
+    expect(runtime.view().todos.items.find((todo) => todo.id === plannedTodoId)).toMatchObject({ scheduledStatus: 'started' });
+  });
+
+  it('marks a planned Todo missed after restart instead of backfilling focus time', async () => {
+    const scheduledStartAt = new Date(2026, 8, 21, 10, 0).getTime();
+    const clock = new FakeClock(scheduledStartAt + 10 * 60_000);
+    const store = new MemoryStore({
+      todos: { activeId: 'planned', items: [{ id: 'planned', day: '2026-09-21', title: '错过的计划', priority: 'P1', estimatePomos: 1, focusMinutes: 25, scheduledStartAt, scheduledStatus: 'pending', completedPomos: 0, spentMs: 0, done: false, createdAt: scheduledStartAt, completedAt: null }] }
+    });
+
+    const runtime = new AppRuntime({ store, clock }); await runtime.init();
+
+    expect(runtime.view().timer.status).toBe('idle');
+    expect(runtime.view().todos.items[0]).toMatchObject({ scheduledStatus: 'missed', spentMs: 0, completedPomos: 0 });
+  });
+
   it('persists a pending break choice across restart and never starts focus automatically', async () => {
     const clock = new FakeClock(1_000); const store = new MemoryStore();
     const runtime = new AppRuntime({ store, clock }); await runtime.init();
