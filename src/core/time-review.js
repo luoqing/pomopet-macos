@@ -130,12 +130,14 @@ function aggregateTasks(timeline, intervals) {
     tasks.set(key, previous);
   };
   for (const item of timeline.filter((entry) => entry.kind === 'focus')) {
-    const key = item.todoId || 'unassigned';
-    add(key, key === 'unassigned' ? '未关联任务' : (item.taskTitle || '未命名任务'), item.endedAt - item.startedAt);
+    const title = item.taskTitle || '未关联任务';
+    const key = item.todoId || (item.taskTitle ? `manual:${item.taskTitle}` : 'unassigned');
+    add(key, title, item.endedAt - item.startedAt);
   }
   for (const interval of intervals.filter((item) => item.kind === 'focus')) {
-    const key = interval.todoId || 'unassigned';
-    add(key, key === 'unassigned' ? '未关联任务' : (interval.taskTitle || '未命名任务'), Number(interval.unplacedActiveMs) || 0);
+    const title = interval.taskTitle || '未关联任务';
+    const key = interval.todoId || (interval.taskTitle ? `manual:${interval.taskTitle}` : 'unassigned');
+    add(key, title, Number(interval.unplacedActiveMs) || 0);
   }
   return [...tasks.values()].sort((left, right) => right.ms - left.ms);
 }

@@ -53,7 +53,6 @@ let customDurationSaveChain = Promise.resolve();
 let lastQueuedCustomDuration = null;
 let selectedReviewDate = null;
 let manualFocusNotice = '';
-let manualFocusTodoOptionsSignature = null;
 let reviewDateOptionsSignature = null;
 
 function createBrowserBridge() {
@@ -128,7 +127,7 @@ const meetingDraft = (meeting) => ({ ...blankMeeting(), ...structuredClone(meeti
 const plannedFocusMinutes = (todo) => Number(todo?.focusMinutes) || selectedDurations()[0];
 const todoDraft = (todo) => ({ id: todo.id, title: todo.title, priority: todo.priority || 'P1', focusMinutes: plannedFocusMinutes(todo), scheduledStartAt: Number(todo.scheduledStartAt) || null });
 const blankTodoAdd = (choices = {}) => ({ title: '', priority: choices.priority || 'P1', focusMinutes: Number(choices.focusMinutes || selectedDurations()[0]) });
-const blankManualFocus = (next = state) => ({ todoId: next?.todos?.activeId || '', startedAt: '', endedAt: '' });
+const blankManualFocus = () => ({ taskTitle: '', startedAt: '', endedAt: '' });
 
 function reportDirty() {
   updateNavigationLock();
@@ -586,15 +585,7 @@ function renderManualFocus() {
   const session = sessions.manualFocus;
   const draft = session.draft;
   const saving = session.saving;
-  const todos = state.todos.items || [];
-  const todoSelect = $('#manualFocusTodo');
-  const options = [{ value: '', label: '不关联待办' }, ...todos.map((todo) => ({ value: todo.id, label: todo.title }))];
-  const signature = JSON.stringify(options);
-  if (document.activeElement !== todoSelect && signature !== manualFocusTodoOptionsSignature) {
-    todoSelect.replaceChildren(...options.map(optionNode));
-    manualFocusTodoOptionsSignature = signature;
-  }
-  if (document.activeElement !== todoSelect) todoSelect.value = todos.some((todo) => todo.id === draft.todoId) ? draft.todoId : '';
+  $('#manualFocusTask').value = draft.taskTitle;
   $('#manualFocusStart').value = draft.startedAt;
   $('#manualFocusEnd').value = draft.endedAt;
   $('#manualFocusError').textContent = session.error || '';
@@ -993,7 +984,7 @@ $('#alarmForm').onsubmit = async (event) => {
   catch { if (!isCurrentSave('reminder', epoch)) return; failSessionSave('reminder', '保存失败，请重试'); renderReminderEditor(); }
 };
 
-$('#manualFocusTodo').onchange = (event) => editSession('manualFocus', { todoId: event.target.value });
+$('#manualFocusTask').oninput = (event) => editSession('manualFocus', { taskTitle: event.target.value });
 $('#manualFocusStart').oninput = (event) => editSession('manualFocus', { startedAt: event.target.value });
 $('#manualFocusEnd').oninput = (event) => editSession('manualFocus', { endedAt: event.target.value });
 $('#reviewDateSelect').onchange = (event) => { selectedReviewDate = event.target.value; renderReview(); };
@@ -1002,6 +993,12 @@ $('#manualFocusForm').onsubmit = async (event) => {
   const draft = sessions.manualFocus.draft;
   const startedAt = new Date(draft.startedAt).getTime();
   const endedAt = new Date(draft.endedAt).getTime();
+  const taskTitle = draft.taskTitle.trim();
+  if (!taskTitle) {
+    failSessionSave('manualFocus', '请写下做了什么');
+    renderManualFocus();
+    return;
+  }
   if (!Number.isFinite(startedAt) || !Number.isFinite(endedAt) || endedAt <= startedAt) {
     failSessionSave('manualFocus', '结束时间要晚于开始时间');
     renderManualFocus();
@@ -1011,7 +1008,7 @@ $('#manualFocusForm').onsubmit = async (event) => {
   if (epoch == null) return;
   renderManualFocus();
   try {
-    const next = await sendCommand('focus:manual:add', { todoId: draft.todoId || undefined, startedAt, endedAt });
+    const next = await sendCommand('focus:manual:add', { taskTitle, startedAt, endedAt });
     if (!isCurrentSave('manualFocus', epoch)) return;
     const actual = next.manualFocus?.spentMs || 0;
     manualFocusNotice = next.manualFocus?.trimmed ? `已保存未重叠的 ${spentText(actual)}` : `已保存 ${spentText(actual)}`;

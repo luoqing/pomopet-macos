@@ -1010,7 +1010,7 @@ test('Todo row edit keeps its DOM node, focus, and caret across state ticks', as
   await expect(page.locator('.todo-item[data-id="other"] .todo-progress')).toContainText('已专注 3 分钟 / 预计 25 分钟');
 });
 
-test('manual focus tab keeps its Todo picker stable through state refreshes and submits the selected time range', async ({ page }) => {
+test('manual focus keeps a free-form task and time range through state refreshes', async ({ page }) => {
   await page.addInitScript(() => {
     const state = {
       now: new Date('2026-09-04T11:00:00').getTime(),
@@ -1034,23 +1034,25 @@ test('manual focus tab keeps its Todo picker stable through state refreshes and 
 
   await page.goto('/');
   await page.getByRole('tab', { name: '补记时间' }).click();
-  await expect(page.locator('#manualFocusTodo')).toHaveValue('todo-1');
-  const pickerStable = await page.locator('#manualFocusTodo').evaluate((node) => { globalThis.__manualFocusPicker = node; node.focus(); return node === document.activeElement; });
-  expect(pickerStable).toBe(true);
+  await expect(page.locator('#manualFocusTodo')).toHaveCount(0);
+  await page.locator('#manualFocusTask').fill('整理会议纪要');
+  const taskInputStable = await page.locator('#manualFocusTask').evaluate((node) => { globalThis.__manualFocusTask = node; node.focus(); return node === document.activeElement; });
+  expect(taskInputStable).toBe(true);
   await page.evaluate(() => globalThis.__manualFocusTick());
-  expect(await page.locator('#manualFocusTodo').evaluate((node) => node === globalThis.__manualFocusPicker)).toBe(true);
-  await page.locator('#manualFocusTodo').selectOption('todo-2');
-  await expect(page.locator('#manualFocusTodo')).toHaveValue('todo-2');
+  expect(await page.locator('#manualFocusTask').evaluate((node) => node === globalThis.__manualFocusTask)).toBe(true);
+  await expect(page.locator('#manualFocusTask')).toHaveValue('整理会议纪要');
   await page.locator('#manualFocusStart').fill('2026-09-04T10:00');
   await page.locator('#manualFocusEnd').fill('2026-09-04T10:30');
   await page.evaluate(() => globalThis.__manualFocusTick());
+  await expect(page.locator('#manualFocusTask')).toHaveValue('整理会议纪要');
   await expect(page.locator('#manualFocusStart')).toHaveValue('2026-09-04T10:00');
   await page.getByRole('button', { name: '保存补记' }).click();
   await expect.poll(() => page.evaluate(() => globalThis.__manualFocusCommands.find((item) => item.name === 'focus:manual:add'))).toEqual({
     name: 'focus:manual:add',
-    payload: { todoId: 'todo-2', startedAt: new Date('2026-09-04T10:00').getTime(), endedAt: new Date('2026-09-04T10:30').getTime() }
+    payload: { taskTitle: '整理会议纪要', startedAt: new Date('2026-09-04T10:00').getTime(), endedAt: new Date('2026-09-04T10:30').getTime() }
   });
   await expect(page.locator('#manualFocusNotice')).toContainText('已保存未重叠的 20 分钟');
+  await expect(page.locator('#manualFocusTask')).toHaveValue('');
 });
 
 test('tabs expose ARIA relationships and support roving keyboard navigation', async ({ page }) => {
