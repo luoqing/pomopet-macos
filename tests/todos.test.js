@@ -55,6 +55,20 @@ describe('TodoLedger recommendations', () => {
     expect(ledger.update(todo.id, { focusMinutes: 999 })).toMatchObject({ focusMinutes: 180 });
   });
 
+  it('uses planned minutes as the Todo progress authority', () => {
+    const clock = new FakeClock(Date.parse('2026-08-28T10:00:00+08:00'));
+    const ledger = new TodoLedger(clock);
+    const todo = ledger.add({ title: '写方案', focusMinutes: 50, estimatePomos: 3 });
+
+    ledger.recordFocus(todo.id, 25 * 60_000, { completed: true });
+
+    expect(ledger.unfinishedItem(todo.id)).toMatchObject({
+      focusMinutes: 50,
+      spentMs: 25 * 60_000,
+      completedPomos: 1
+    });
+  });
+
   it('stores a one-shot planned start and clears its state with the timestamp', () => {
     const clock = new FakeClock(Date.parse('2026-09-21T09:00:00+08:00'));
     const ledger = new TodoLedger(clock);

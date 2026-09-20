@@ -53,6 +53,8 @@ let customDurationSaveChain = Promise.resolve();
 let lastQueuedCustomDuration = null;
 let selectedReviewDate = null;
 let manualFocusNotice = '';
+let manualFocusTodoOptionsSignature = null;
+let reviewDateOptionsSignature = null;
 
 function createBrowserBridge() {
   const demo = {
@@ -74,7 +76,7 @@ function createBrowserBridge() {
       if (name === 'timer:updateTask') demo.timer.task = String(payload.task || '').trim();
       if (name === 'timer:pause') { demo.timer.remainingMs = Math.max(0, demo.timer.targetAt - demo.now); demo.timer.targetAt = null; demo.timer.status = 'paused'; }
       if (name === 'timer:resume') { demo.timer.targetAt = demo.now + demo.timer.remainingMs; demo.timer.status = 'running'; }
-      if (name === 'todo:add') { const item = { id: `browser-todo-${demo.now}`, title: payload.title, priority: payload.priority, estimatePomos: Number(payload.estimatePomos) || 1, focusMinutes: payload.focusMinutes ?? null, completedPomos: 0, spentMs: 0, done: false, createdAt: demo.now }; demo.todos.items.unshift(item); demo.todos.activeId = item.id; }
+      if (name === 'todo:add') { const item = { id: `browser-todo-${demo.now}`, title: payload.title, priority: payload.priority, focusMinutes: payload.focusMinutes ?? null, completedPomos: 0, spentMs: 0, done: false, createdAt: demo.now }; demo.todos.items.unshift(item); demo.todos.activeId = item.id; }
       if (name === 'todo:active') demo.todos.activeId = payload.id;
       if (name === 'todo:toggle') { const item = demo.todos.items.find((todo) => todo.id === payload.id); if (item) item.done = Boolean(payload.done); }
       if (name === 'todo:start') { const item = demo.todos.items.find((todo) => todo.id === payload.id && !todo.done); if (item) { demo.todos.activeId = item.id; demo.timer = { ...demo.timer, status: 'running', phase: 'focus', task: item.title, todoId: item.id, remainingMs: payload.focusMinutes * 60_000, targetAt: demo.now + payload.focusMinutes * 60_000 }; } }
@@ -100,6 +102,12 @@ function createBrowserBridge() {
 
 const escapeHtml = (value) => { const span = document.createElement('span'); span.textContent = value ?? ''; return span.innerHTML; };
 const escapeAttr = (value) => escapeHtml(value).replaceAll('"', '&quot;');
+const optionNode = ({ value, label }) => {
+  const option = document.createElement('option');
+  option.value = value;
+  option.textContent = label;
+  return option;
+};
 const format = (ms) => { const seconds = Math.ceil(Math.max(0, ms) / 1000); return `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`; };
 const displayRemaining = (timer) => timer.status === 'running' && timer.targetAt ? Math.max(0, timer.targetAt - (Date.now() - clockSkewMs)) : timer.remainingMs;
 const dateInput = (timestamp) => {
@@ -117,8 +125,9 @@ const blankReminder = () => ({ id: null, label: '', type: 'once', at: Date.now()
 const reminderDraft = (alarm) => ({ ...blankReminder(), ...structuredClone(alarm || {}), weekdays: [...(alarm?.weekdays || [1, 2, 3, 4, 5])], pose: alarm?.pose === 'alarm' ? 'annoyed' : (alarm?.pose || 'annoyed') });
 const blankMeeting = () => ({ id: null, title: '', startTime: '10:00', endTime: '11:00', weekdays: [1, 2, 3, 4, 5], enabled: true, autoMute: true });
 const meetingDraft = (meeting) => ({ ...blankMeeting(), ...structuredClone(meeting || {}), weekdays: [...(meeting?.weekdays || [1, 2, 3, 4, 5])] });
-const todoDraft = (todo) => ({ id: todo.id, title: todo.title, priority: todo.priority || 'P1', estimatePomos: Number(todo.estimatePomos || 1), focusMinutes: Number(todo.focusMinutes || selectedDurations()[0]), scheduledStartAt: Number(todo.scheduledStartAt) || null });
-const blankTodoAdd = (choices = {}) => ({ title: '', priority: choices.priority || 'P1', estimatePomos: Number(choices.estimatePomos || 1), focusMinutes: Number(choices.focusMinutes || selectedDurations()[0]) });
+const plannedFocusMinutes = (todo) => Number(todo?.focusMinutes) || selectedDurations()[0];
+const todoDraft = (todo) => ({ id: todo.id, title: todo.title, priority: todo.priority || 'P1', focusMinutes: plannedFocusMinutes(todo), scheduledStartAt: Number(todo.scheduledStartAt) || null });
+const blankTodoAdd = (choices = {}) => ({ title: '', priority: choices.priority || 'P1', focusMinutes: Number(choices.focusMinutes || selectedDurations()[0]) });
 const blankManualFocus = (next = state) => ({ todoId: next?.todos?.activeId || '', startedAt: '', endedAt: '' });
 
 function reportDirty() {
@@ -362,8 +371,14 @@ function reviewMeetingGantt(day) {
 function renderReview() {
   const days = state.review?.days || [];
   if (!days.some((day) => day.date === selectedReviewDate)) selectedReviewDate = days[0]?.date || null;
-  $('#reviewDateSelect').innerHTML = days.map((day, index) => `<option value="${escapeAttr(day.date)}" ${day.date === selectedReviewDate ? 'selected' : ''}>${shortDate(day.date, index)} · ${compactDuration(day.totals?.focusMs)}</option>`).join('');
-  $('#reviewDateSelect').onchange = (event) => { selectedReviewDate = event.target.value; renderReview(); };
+  const dateSelect = $('#reviewDateSelect');
+  const options = days.map((day, index) => ({ value: day.date, label: `${shortDate(day.date, index)} · ${compactDuration(day.totals?.focusMs)}` }));
+  const signature = JSON.stringify(options);
+  if (document.activeElement !== dateSelect && signature !== reviewDateOptionsSignature) {
+    dateSelect.replaceChildren(...options.map(optionNode));
+    reviewDateOptionsSignature = signature;
+  }
+  if (document.activeElement !== dateSelect) dateSelect.value = selectedReviewDate || '';
   const day = days.find((item) => item.date === selectedReviewDate);
   if (!day) {
     $('#reviewSelectedDate').textContent = '时间花在哪里'; $('#reviewSummary').replaceChildren(); $('#reviewTimeline').innerHTML = '<p class="review-empty">开始一颗番茄后，这里会出现你的时间足迹。</p>'; $('#reviewTimelineDetail').textContent = '悬停时间块查看任务和时段'; $('#reviewMeetingGantt').replaceChildren(); $('#reviewTasks').replaceChildren(); $('#reviewReminderTotals').replaceChildren(); return;
@@ -425,7 +440,6 @@ function renderTodoAdd() {
   const saving = Boolean(session.saving || sessions.todo?.saving);
   $('#todoTitle').value = session.draft.title;
   $('#todoPriority').value = session.draft.priority;
-  $('#todoEstimate').value = session.draft.estimatePomos;
   $('#todoFocusMinutes').value = session.draft.focusMinutes;
   $('#todoAddError').textContent = session.error || '';
   $('#todoForm').setAttribute('aria-busy', String(saving));
@@ -442,8 +456,10 @@ function todoRowMarkup(todo, isEditing, listLocked) {
   const row = isEditing && sessions.todo ? sessions.todo.draft : todo;
   const classes = ['todo-item', isEditing ? 'editing' : '', todo.id === state.todos.activeId ? 'active' : '', todo.done ? 'done' : '', isEditing && sessions.todo?.saving ? 'is-saving' : ''].filter(Boolean).join(' ');
   const disabled = listLocked ? 'disabled' : '';
-  if (isEditing) return `<article class="${classes}" data-id="${escapeAttr(todo.id)}" aria-busy="${sessions.todo.saving}"><input class="todo-done" type="checkbox" ${todo.done ? 'checked' : ''} ${disabled} aria-label="完成 ${escapeAttr(todo.title)}"><div class="todo-edit-fields"><input class="todo-title-input" value="${escapeAttr(row.title)}" ${disabled} aria-label="事项"><div class="todo-edit-meta"><select class="todo-priority" ${disabled} aria-label="优先级">${Object.entries(priorityLabels).map(([value, label]) => `<option value="${value}" ${row.priority === value ? 'selected' : ''}>${label}</option>`).join('')}</select><label><input class="todo-estimate" type="number" min="1" max="12" value="${row.estimatePomos}" ${disabled} aria-label="预估番茄"> 颗番茄</label><label><input class="todo-focus-minutes" type="number" min="1" max="180" value="${row.focusMinutes}" ${disabled} aria-label="本次专注时长"> 分钟</label><label><input class="todo-scheduled-start" type="datetime-local" value="${dateInput(row.scheduledStartAt)}" ${disabled} aria-label="计划开始时间"> 计划开始</label></div><p class="form-error todo-error">${escapeHtml(sessions.todo.error || '')}</p></div><div class="todo-edit-actions"><button class="todo-save" type="button" ${disabled}>保存</button><button class="todo-cancel" type="button" ${disabled}>取消</button></div></article>`;
-  const progress = Math.min(100, Math.round(Number(todo.completedPomos || 0) / Math.max(1, Number(todo.estimatePomos || 1)) * 100));
+  if (isEditing) return `<article class="${classes}" data-id="${escapeAttr(todo.id)}" aria-busy="${sessions.todo.saving}"><input class="todo-done" type="checkbox" ${todo.done ? 'checked' : ''} ${disabled} aria-label="完成 ${escapeAttr(todo.title)}"><div class="todo-edit-fields"><input class="todo-title-input" value="${escapeAttr(row.title)}" ${disabled} aria-label="事项"><div class="todo-edit-meta"><select class="todo-priority" ${disabled} aria-label="优先级">${Object.entries(priorityLabels).map(([value, label]) => `<option value="${value}" ${row.priority === value ? 'selected' : ''}>${label}</option>`).join('')}</select><label><input class="todo-focus-minutes" type="number" min="1" max="180" value="${row.focusMinutes}" ${disabled} aria-label="预计专注时长"> 分钟</label><label><input class="todo-scheduled-start" type="datetime-local" value="${dateInput(row.scheduledStartAt)}" ${disabled} aria-label="计划开始时间"> 计划开始</label></div><p class="form-error todo-error">${escapeHtml(sessions.todo.error || '')}</p></div><div class="todo-edit-actions"><button class="todo-save" type="button" ${disabled}>保存</button><button class="todo-cancel" type="button" ${disabled}>取消</button></div></article>`;
+  const plannedMinutes = plannedFocusMinutes(todo);
+  const spentMinutes = Math.round((Number(todo.spentMs) || 0) / 60_000);
+  const progress = Math.min(100, Math.round(spentMinutes / plannedMinutes * 100));
   const confirming = (deleteConfirmations.get(todo.id) || 0) > Date.now();
   const isCurrentTodo = state.timer.todoId === todo.id && ['running', 'paused'].includes(state.timer.status);
   const startDisabled = listLocked || (!isCurrentTodo && !['idle', 'stopped'].includes(state.timer.status)) ? 'disabled' : '';
@@ -453,7 +469,7 @@ function todoRowMarkup(todo, isEditing, listLocked) {
       ? { command: 'resume', label: '继续专注', icon: '▶' }
       : { command: 'start', label: '开始专注', icon: '▶' };
   const startButton = todo.done ? '' : `<button class="todo-start" type="button" data-action="${action.command}" ${startDisabled} aria-label="${action.label} ${escapeAttr(todo.title)}" title="${action.label}">${action.icon}</button>`;
-  return `<article class="${classes}" data-id="${escapeAttr(todo.id)}"><input class="todo-done" type="checkbox" ${todo.done ? 'checked' : ''} ${disabled} aria-label="完成 ${escapeAttr(todo.title)}"><div class="todo-content"><strong class="todo-title">${escapeHtml(todo.title)}</strong><div class="todo-meta"><small class="todo-progress">${todo.completedPomos || 0}/${todo.estimatePomos} 番茄 · ${spentText(todo.spentMs)}</small><span class="todo-meter" aria-hidden="true"><i style="width:${progress}%"></i></span></div></div><span class="todo-priority-pill priority-${String(todo.priority).toLowerCase()}">${priorityLabels[todo.priority]}</span><div class="todo-row-actions">${startButton}<button class="todo-edit" type="button" ${disabled} aria-label="编辑 ${escapeAttr(todo.title)}" title="编辑">✎</button><button class="todo-remove" type="button" ${disabled} aria-label="删除 ${escapeAttr(todo.title)}" title="${confirming ? '再次点击确认删除' : '删除'}" data-confirming="${confirming}">${confirming ? '删' : '×'}</button></div></article>`;
+  return `<article class="${classes}" data-id="${escapeAttr(todo.id)}"><input class="todo-done" type="checkbox" ${todo.done ? 'checked' : ''} ${disabled} aria-label="完成 ${escapeAttr(todo.title)}"><div class="todo-content"><strong class="todo-title">${escapeHtml(todo.title)}</strong><div class="todo-meta"><small class="todo-progress">已专注 ${spentText(todo.spentMs)} / 预计 ${plannedMinutes} 分钟</small><span class="todo-meter" aria-hidden="true"><i style="width:${progress}%"></i></span></div></div><span class="todo-priority-pill priority-${String(todo.priority).toLowerCase()}">${priorityLabels[todo.priority]}</span><div class="todo-row-actions">${startButton}<button class="todo-edit" type="button" ${disabled} aria-label="编辑 ${escapeAttr(todo.title)}" title="编辑">✎</button><button class="todo-remove" type="button" ${disabled} aria-label="删除 ${escapeAttr(todo.title)}" title="${confirming ? '再次点击确认删除' : '删除'}" data-confirming="${confirming}">${confirming ? '删' : '×'}</button></div></article>`;
 }
 
 function todoRowSignature(todo, isEditing, listLocked) {
@@ -474,9 +490,9 @@ function renderTodos() {
   const items = state.todos.items || [];
   if (editingTodoId && !items.some((todo) => todo.id === editingTodoId)) { editingTodoId = null; sessions.todo = null; }
   const doneCount = items.filter((todo) => todo.done).length;
-  const planned = items.reduce((sum, todo) => sum + Number(todo.estimatePomos || 0), 0);
-  const actual = items.reduce((sum, todo) => sum + Number(todo.completedPomos || 0), 0);
-  $('#todoStats').textContent = items.length ? `完成 ${doneCount}/${items.length} · 计划 ${planned} 番茄 · 已用 ${actual} 番茄` : '先列 3 件最重要的事';
+  const planned = items.reduce((sum, todo) => sum + plannedFocusMinutes(todo), 0);
+  const actual = items.reduce((sum, todo) => sum + Math.round((Number(todo.spentMs) || 0) / 60_000), 0);
+  $('#todoStats').textContent = items.length ? `完成 ${doneCount}/${items.length} · 计划 ${planned} 分钟 · 已专注 ${actual} 分钟` : '先列 3 件最重要的事';
   const list = $('#todoList');
   if (!items.length) { if (!list.querySelector('.empty')) list.innerHTML = '<div class="empty compact">把今天真正要推进的事写下来。</div>'; return; }
   list.querySelector('.empty')?.remove();
@@ -520,7 +536,6 @@ function bindTodoRow(row) {
     });
     row.querySelector('.todo-title-input')?.addEventListener('input', (event) => editSession('todo', { title: event.target.value }));
     row.querySelector('.todo-priority')?.addEventListener('change', (event) => editSession('todo', { priority: event.target.value }));
-    row.querySelector('.todo-estimate')?.addEventListener('input', (event) => editSession('todo', { estimatePomos: Number(event.target.value) || 1 }));
     row.querySelector('.todo-focus-minutes')?.addEventListener('input', (event) => editSession('todo', { focusMinutes: Number(event.target.value) || 1 }));
     row.querySelector('.todo-scheduled-start')?.addEventListener('input', (event) => editSession('todo', { scheduledStartAt: event.target.value ? new Date(event.target.value).getTime() : null }));
     row.querySelector('.todo-save')?.addEventListener('click', async () => {
@@ -528,7 +543,7 @@ function bindTodoRow(row) {
       const draft = sessions.todo?.draft;
       if (!draft?.title.trim()) { setSession('todo', draftSaveFailed(sessions.todo, '请输入事项')); renderTodos(); return; }
       const epoch = startSessionSave('todo'); if (epoch == null) return; renderTodoPanel();
-      try { const next = await sendCommand('todo:update', { id, patch: { title: draft.title.trim(), priority: draft.priority, estimatePomos: draft.estimatePomos, focusMinutes: draft.focusMinutes, scheduledStartAt: draft.scheduledStartAt } }); if (!isCurrentSave('todo', epoch)) return; sessions.todo = draftSaveSucceeded(sessions.todo); editingTodoId = null; sessions.todo = null; reportDirty(); render(next); }
+      try { const next = await sendCommand('todo:update', { id, patch: { title: draft.title.trim(), priority: draft.priority, focusMinutes: draft.focusMinutes, scheduledStartAt: draft.scheduledStartAt } }); if (!isCurrentSave('todo', epoch)) return; sessions.todo = draftSaveSucceeded(sessions.todo); editingTodoId = null; sessions.todo = null; reportDirty(); render(next); }
       catch { if (!isCurrentSave('todo', epoch)) return; setSession('todo', draftSaveFailed(sessions.todo, '保存失败，请重试')); renderTodoPanel(); }
     });
     row.querySelector('.todo-cancel')?.addEventListener('click', () => { sessions.todo = sessions.todo ? cancelDraft(sessions.todo) : null; editingTodoId = null; sessions.todo = null; reportDirty(); renderTodos(); });
@@ -572,9 +587,14 @@ function renderManualFocus() {
   const draft = session.draft;
   const saving = session.saving;
   const todos = state.todos.items || [];
-  $('#manualFocusTodo').innerHTML = '<option value="">不关联待办</option>' + todos
-    .map((todo) => `<option value="${escapeAttr(todo.id)}">${escapeHtml(todo.title)}</option>`).join('');
-  $('#manualFocusTodo').value = todos.some((todo) => todo.id === draft.todoId) ? draft.todoId : '';
+  const todoSelect = $('#manualFocusTodo');
+  const options = [{ value: '', label: '不关联待办' }, ...todos.map((todo) => ({ value: todo.id, label: todo.title }))];
+  const signature = JSON.stringify(options);
+  if (document.activeElement !== todoSelect && signature !== manualFocusTodoOptionsSignature) {
+    todoSelect.replaceChildren(...options.map(optionNode));
+    manualFocusTodoOptionsSignature = signature;
+  }
+  if (document.activeElement !== todoSelect) todoSelect.value = todos.some((todo) => todo.id === draft.todoId) ? draft.todoId : '';
   $('#manualFocusStart').value = draft.startedAt;
   $('#manualFocusEnd').value = draft.endedAt;
   $('#manualFocusError').textContent = session.error || '';
@@ -892,7 +912,6 @@ $('#mainAction').onclick = async () => { const timer = state.timer; if (timer.st
 });
 $('#todoTitle').oninput = (event) => editSession('todoAdd', { title: event.target.value });
 $('#todoPriority').onchange = (event) => editSession('todoAdd', { priority: event.target.value });
-$('#todoEstimate').oninput = (event) => editSession('todoAdd', { estimatePomos: Number(event.target.value) || 1 });
 $('#todoFocusMinutes').oninput = (event) => editSession('todoAdd', { focusMinutes: Number(event.target.value) || 1 });
 $('#addTodo').onclick = async () => {
   if (sessions.todo?.saving) return;
@@ -900,7 +919,7 @@ $('#addTodo').onclick = async () => {
   if (!draft.title.trim()) { setSession('todoAdd', draftSaveFailed(sessions.todoAdd, '请输入待办事项')); renderTodoAdd(); return; }
   const epoch = startSessionSave('todoAdd'); if (epoch == null) return; renderTodoPanel();
   try {
-    const next = await sendCommand('todo:add', { title: draft.title.trim(), priority: draft.priority, estimatePomos: draft.estimatePomos, focusMinutes: draft.focusMinutes });
+    const next = await sendCommand('todo:add', { title: draft.title.trim(), priority: draft.priority, focusMinutes: draft.focusMinutes });
     if (!isCurrentSave('todoAdd', epoch)) return;
     sessions.todoAdd = draftSaveSucceeded(sessions.todoAdd, blankTodoAdd(draft)); reportDirty(); $('#addTodo').blur(); render(next);
   } catch {
@@ -977,6 +996,7 @@ $('#alarmForm').onsubmit = async (event) => {
 $('#manualFocusTodo').onchange = (event) => editSession('manualFocus', { todoId: event.target.value });
 $('#manualFocusStart').oninput = (event) => editSession('manualFocus', { startedAt: event.target.value });
 $('#manualFocusEnd').oninput = (event) => editSession('manualFocus', { endedAt: event.target.value });
+$('#reviewDateSelect').onchange = (event) => { selectedReviewDate = event.target.value; renderReview(); };
 $('#manualFocusForm').onsubmit = async (event) => {
   event.preventDefault();
   const draft = sessions.manualFocus.draft;

@@ -18,10 +18,11 @@ test('control surface renders and completes browser fallback timer flow', async 
   expect(await page.locator('#task').evaluate((node) => globalThis.getComputedStyle(node).webkitAppRegion)).toBe('no-drag');
   await page.locator('#todoTitle').fill('完成S级评论需求的代码CR和测试');
   await page.locator('#todoPriority').selectOption('P0');
-  await page.locator('#todoEstimate').fill('2');
+  await page.locator('#todoFocusMinutes').fill('50');
   await page.locator('#addTodo').click();
   await expect(page.locator('.todo-item')).toHaveCount(1);
-  await expect(page.locator('#todoStats')).toContainText('计划 2 番茄');
+  await expect(page.locator('#todoStats')).toContainText('计划 50 分钟');
+  await expect(page.locator('.todo-progress')).toContainText('已专注 0 分钟 / 预计 50 分钟');
   await expect(page.locator('#task')).toHaveText('完成S级评论需求的代码CR和测试');
   await page.getByRole('button', { name: '开始专注', exact: true }).click(); await expect(page.locator('#mainAction')).toHaveText('暂停');
   await expect(page.locator('#clock')).toHaveText(/^24:5[89]$/);
@@ -438,7 +439,7 @@ test('the active Todo toggles between start, pause, and resume with its configur
   await expect.poll(() => page.evaluate(() => globalThis.__todoControlCommands.at(-1))).toEqual({ name: 'timer:resume', payload: undefined });
 });
 
-test('quick Todo creation saves its configured focus duration without losing priority or pomodoro estimate', async ({ page }) => {
+test('quick Todo creation saves focus minutes as its only planned amount', async ({ page }) => {
   await page.addInitScript(() => {
     const state = {
       now: Date.now(),
@@ -469,13 +470,13 @@ test('quick Todo creation saves its configured focus duration without losing pri
   await page.goto('/');
   await page.locator('#todoTitle').fill('整理评审结论');
   await page.locator('#todoPriority').selectOption('P0');
-  await page.locator('#todoEstimate').fill('3');
+  await expect(page.locator('#todoEstimate')).toHaveCount(0);
   await page.locator('#todoFocusMinutes').fill('50');
   await page.locator('#addTodo').click();
 
   await expect.poll(() => page.evaluate(() => [...globalThis.__quickTodoCommands].reverse().find(({ name }) => name === 'todo:add'))).toEqual({
     name: 'todo:add',
-    payload: { title: '整理评审结论', priority: 'P0', estimatePomos: 3, focusMinutes: 50 }
+    payload: { title: '整理评审结论', priority: 'P0', focusMinutes: 50 }
   });
 });
 
@@ -890,12 +891,12 @@ test('add Todo draft survives ticks and failures, resets on discard, and retains
     globalThis.__dirtyReports = dirty; globalThis.__emitState = () => listeners.forEach((callback) => callback(copy(state))); globalThis.__allowTodoAdd = () => { fail = false; };
     globalThis.pomopet = { getState: async () => copy(state), onState: (callback) => { listeners.push(callback); return () => {}; }, command: async (name, payload) => { if (name === 'todo:add') { if (fail) throw new Error('disk_full'); const item = { id: 'todo-1', title: payload.title, priority: payload.priority, estimatePomos: payload.estimatePomos, completedPomos: 0, spentMs: 0, done: false }; state.todos.items.push(item); state.todos.activeId = item.id; } return copy(state); }, setDirty: (value) => dirty.push(value), onDiscardDrafts: (callback) => { globalThis.__discardDrafts = callback; return () => {}; }, showControl: () => {} };
   });
-  await page.goto('/'); await page.locator('#todoTitle').fill('失败也不能丢'); await page.locator('#todoPriority').selectOption('P0'); await page.locator('#todoEstimate').fill('3');
-  await page.evaluate(() => globalThis.__emitState()); await expect(page.locator('#todoTitle')).toHaveValue('失败也不能丢'); await expect(page.locator('#todoPriority')).toHaveValue('P0'); await expect(page.locator('#todoEstimate')).toHaveValue('3');
-  await page.locator('#addTodo').click(); await expect(page.locator('#todoAddError')).toContainText('添加失败'); await expect(page.locator('#todoTitle')).toHaveValue('失败也不能丢'); await expect(page.locator('#todoPriority')).toHaveValue('P0'); await expect(page.locator('#todoEstimate')).toHaveValue('3'); expect((await page.evaluate(() => globalThis.__dirtyReports)).at(-1)).toBe(true);
-  await page.evaluate(() => globalThis.__discardDrafts()); await expect(page.locator('#todoTitle')).toHaveValue(''); await expect(page.locator('#todoPriority')).toHaveValue('P1'); await expect(page.locator('#todoEstimate')).toHaveValue('1');
-  await page.locator('#todoTitle').fill('成功保留选项'); await page.locator('#todoPriority').selectOption('P2'); await page.locator('#todoEstimate').fill('4'); await page.evaluate(() => globalThis.__allowTodoAdd()); await page.locator('#addTodo').click();
-  await expect(page.locator('#todoTitle')).toHaveValue(''); await expect(page.locator('#todoPriority')).toHaveValue('P2'); await expect(page.locator('#todoEstimate')).toHaveValue('4'); expect((await page.evaluate(() => globalThis.__dirtyReports)).at(-1)).toBe(false);
+  await page.goto('/'); await page.locator('#todoTitle').fill('失败也不能丢'); await page.locator('#todoPriority').selectOption('P0'); await page.locator('#todoFocusMinutes').fill('50');
+  await page.evaluate(() => globalThis.__emitState()); await expect(page.locator('#todoTitle')).toHaveValue('失败也不能丢'); await expect(page.locator('#todoPriority')).toHaveValue('P0'); await expect(page.locator('#todoFocusMinutes')).toHaveValue('50');
+  await page.locator('#addTodo').click(); await expect(page.locator('#todoAddError')).toContainText('添加失败'); await expect(page.locator('#todoTitle')).toHaveValue('失败也不能丢'); await expect(page.locator('#todoPriority')).toHaveValue('P0'); await expect(page.locator('#todoFocusMinutes')).toHaveValue('50'); expect((await page.evaluate(() => globalThis.__dirtyReports)).at(-1)).toBe(true);
+  await page.evaluate(() => globalThis.__discardDrafts()); await expect(page.locator('#todoTitle')).toHaveValue(''); await expect(page.locator('#todoPriority')).toHaveValue('P1'); await expect(page.locator('#todoFocusMinutes')).toHaveValue('25');
+  await page.locator('#todoTitle').fill('成功保留选项'); await page.locator('#todoPriority').selectOption('P2'); await page.locator('#todoFocusMinutes').fill('75'); await page.evaluate(() => globalThis.__allowTodoAdd()); await page.locator('#addTodo').click();
+  await expect(page.locator('#todoTitle')).toHaveValue(''); await expect(page.locator('#todoPriority')).toHaveValue('P2'); await expect(page.locator('#todoFocusMinutes')).toHaveValue('75'); expect((await page.evaluate(() => globalThis.__dirtyReports)).at(-1)).toBe(false);
 });
 
 test('saving locks every protected editor until delayed commands settle', async ({ page }) => {
@@ -910,11 +911,11 @@ test('saving locks every protected editor until delayed commands settle', async 
 
   await page.locator('#todoTitle').fill('延迟添加'); await page.locator('#addTodo').click();
   await expect(page.locator('#todoForm')).toHaveAttribute('aria-busy', 'true');
-  await expect(page.locator('#todoTitle')).toBeDisabled(); await expect(page.locator('#todoPriority')).toBeDisabled(); await expect(page.locator('#todoEstimate')).toBeDisabled(); await expect(page.locator('#addTodo')).toBeDisabled(); await expect(page.getByRole('tab', { name: '宠物性格' })).toBeDisabled();
+  await expect(page.locator('#todoTitle')).toBeDisabled(); await expect(page.locator('#todoPriority')).toBeDisabled(); await expect(page.locator('#todoFocusMinutes')).toBeDisabled(); await expect(page.locator('#addTodo')).toBeDisabled(); await expect(page.getByRole('tab', { name: '宠物性格' })).toBeDisabled();
   await page.evaluate(() => globalThis.__settle('todo:add')); await expect(page.locator('#todoTitle')).toBeEnabled(); await expect(page.locator('#todoTitle')).toHaveValue('延迟添加');
 
   await page.locator('.todo-edit').click(); await page.locator('.todo-title-input').fill('延迟行编辑'); await page.locator('.todo-save').click();
-  await expect(page.locator('.todo-item.editing')).toHaveAttribute('aria-busy', 'true'); await expect(page.locator('.todo-title-input')).toBeDisabled(); await expect(page.locator('.todo-priority')).toBeDisabled(); await expect(page.locator('.todo-estimate')).toBeDisabled(); await expect(page.locator('.todo-save')).toBeDisabled(); await expect(page.locator('.todo-cancel')).toBeDisabled();
+  await expect(page.locator('.todo-item.editing')).toHaveAttribute('aria-busy', 'true'); await expect(page.locator('.todo-title-input')).toBeDisabled(); await expect(page.locator('.todo-priority')).toBeDisabled(); await expect(page.locator('.todo-focus-minutes')).toBeDisabled(); await expect(page.locator('.todo-save')).toBeDisabled(); await expect(page.locator('.todo-cancel')).toBeDisabled();
   await page.evaluate(() => globalThis.__settle('todo:update')); await expect(page.locator('.todo-title-input')).toBeEnabled(); await expect(page.locator('.todo-title-input')).toHaveValue('延迟行编辑');
 
   await page.locator('.alarm-edit').click(); await page.locator('#alarmLabel').fill('延迟提醒'); await page.locator('#saveAlarm').click();
@@ -999,22 +1000,22 @@ test('Todo row edit keeps its DOM node, focus, and caret across state ticks', as
   await page.addInitScript(() => {
     const state = { now: Date.now(), timer: { status: 'idle', phase: 'focus', remainingMs: 1 }, todos: { items: [{ id: 'editing', title: '保持输入', priority: 'P1', estimatePomos: 1, completedPomos: 0, spentMs: 0, done: false }, { id: 'other', title: '另一项', priority: 'P2', estimatePomos: 1, completedPomos: 0, spentMs: 0, done: false }], activeId: 'editing' }, alarms: [], offwork: {}, persona: {}, settings: {}, aiStatus: { status: 'builtin' } };
     const listeners = []; const copy = (value) => JSON.parse(JSON.stringify(value));
-    globalThis.__tick = () => { state.now += 1000; state.todos.items[1].completedPomos += 1; listeners.forEach((callback) => callback(copy(state))); };
+    globalThis.__tick = () => { state.now += 1000; state.todos.items[1].spentMs += 60_000; listeners.forEach((callback) => callback(copy(state))); };
     globalThis.pomopet = { getState: async () => copy(state), onState: (callback) => { listeners.push(callback); return () => {}; }, command: async () => copy(state), setDirty: () => {}, onDiscardDrafts: () => () => {}, showControl: () => {} };
   });
   await page.goto('/'); await page.locator('.todo-item[data-id="editing"] .todo-edit').click(); const input = page.locator('.todo-title-input'); await input.fill('光标保持在这里');
   await input.evaluate((node) => { node.focus(); node.setSelectionRange(3, 6); globalThis.__editingInput = node; });
   await page.evaluate(() => { globalThis.__tick(); globalThis.__tick(); globalThis.__tick(); });
   expect(await input.evaluate((node) => ({ same: node === globalThis.__editingInput, focused: node === document.activeElement, start: node.selectionStart, end: node.selectionEnd }))).toEqual({ same: true, focused: true, start: 3, end: 6 });
-  await expect(page.locator('.todo-item[data-id="other"] .todo-progress')).toContainText('3/1');
+  await expect(page.locator('.todo-item[data-id="other"] .todo-progress')).toContainText('已专注 3 分钟 / 预计 25 分钟');
 });
 
-test('manual focus tab preserves its draft and submits the selected Todo time range', async ({ page }) => {
+test('manual focus tab keeps its Todo picker stable through state refreshes and submits the selected time range', async ({ page }) => {
   await page.addInitScript(() => {
     const state = {
       now: new Date('2026-09-04T11:00:00').getTime(),
       timer: { status: 'idle', phase: 'focus', remainingMs: 25 * 60_000 },
-      todos: { activeId: 'todo-1', items: [{ id: 'todo-1', title: '整理需求', priority: 'P1', estimatePomos: 1, completedPomos: 0, spentMs: 0, done: false }] },
+      todos: { activeId: 'todo-1', items: [{ id: 'todo-1', title: '整理需求', priority: 'P1', focusMinutes: 25, completedPomos: 0, spentMs: 0, done: false }, { id: 'todo-2', title: '补测试', priority: 'P0', focusMinutes: 50, completedPomos: 0, spentMs: 0, done: false }] },
       alarms: [], meetings: { items: [] }, review: { days: [] }, offwork: {}, persona: {}, settings: {}, aiStatus: { status: 'builtin' }
     };
     const listeners = []; const commands = []; const copy = (value) => JSON.parse(JSON.stringify(value));
@@ -1034,6 +1035,12 @@ test('manual focus tab preserves its draft and submits the selected Todo time ra
   await page.goto('/');
   await page.getByRole('tab', { name: '补记时间' }).click();
   await expect(page.locator('#manualFocusTodo')).toHaveValue('todo-1');
+  const pickerStable = await page.locator('#manualFocusTodo').evaluate((node) => { globalThis.__manualFocusPicker = node; node.focus(); return node === document.activeElement; });
+  expect(pickerStable).toBe(true);
+  await page.evaluate(() => globalThis.__manualFocusTick());
+  expect(await page.locator('#manualFocusTodo').evaluate((node) => node === globalThis.__manualFocusPicker)).toBe(true);
+  await page.locator('#manualFocusTodo').selectOption('todo-2');
+  await expect(page.locator('#manualFocusTodo')).toHaveValue('todo-2');
   await page.locator('#manualFocusStart').fill('2026-09-04T10:00');
   await page.locator('#manualFocusEnd').fill('2026-09-04T10:30');
   await page.evaluate(() => globalThis.__manualFocusTick());
@@ -1041,7 +1048,7 @@ test('manual focus tab preserves its draft and submits the selected Todo time ra
   await page.getByRole('button', { name: '保存补记' }).click();
   await expect.poll(() => page.evaluate(() => globalThis.__manualFocusCommands.find((item) => item.name === 'focus:manual:add'))).toEqual({
     name: 'focus:manual:add',
-    payload: { todoId: 'todo-1', startedAt: new Date('2026-09-04T10:00').getTime(), endedAt: new Date('2026-09-04T10:30').getTime() }
+    payload: { todoId: 'todo-2', startedAt: new Date('2026-09-04T10:00').getTime(), endedAt: new Date('2026-09-04T10:30').getTime() }
   });
   await expect(page.locator('#manualFocusNotice')).toContainText('已保存未重叠的 20 分钟');
 });
@@ -1286,6 +1293,10 @@ test('time review matches the full-width daily report prototype with date naviga
   expect(await page.locator('#reviewSummary strong').evaluateAll((items) => items.every((item) => item.scrollWidth <= item.clientWidth))).toBe(true);
   const secondDate = await page.locator('#reviewDateSelect option').nth(1).getAttribute('value');
   const firstDate = await page.locator('#reviewDateSelect option').first().getAttribute('value');
+  const datePickerStable = await page.locator('#reviewDateSelect').evaluate((node) => { globalThis.__reviewDatePicker = node; node.focus(); return node === document.activeElement; });
+  expect(datePickerStable).toBe(true);
+  await page.evaluate(() => globalThis.__emitReviewState());
+  expect(await page.locator('#reviewDateSelect').evaluate((node) => node === globalThis.__reviewDatePicker)).toBe(true);
   await page.locator('#reviewDateSelect').selectOption(secondDate);
   await expect(page.locator('#reviewTasks')).toContainText('历史任务 1');
   await expect(page.locator('#reviewTasks')).not.toContainText('产品设计');
