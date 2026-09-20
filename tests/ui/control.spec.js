@@ -1285,6 +1285,8 @@ test('time review matches the full-width daily report prototype with date naviga
   expect(await page.locator('#reviewTimeline .review-reminder-marker').allTextContents()).toEqual(['水', '动']);
   await expect(page.locator('#reviewTimeline')).toHaveCSS('overflow-y', 'auto');
   expect(await page.locator('#reviewTimeline').evaluate((node) => node.scrollHeight > node.clientHeight)).toBe(true);
+  expect(await page.locator('#reviewTimeline .review-vertical').evaluate((node) => Number.parseFloat(node.style.height))).toBeLessThan(1_500);
+  expect(await page.locator('#reviewTimeline').evaluate((node) => node.scrollTop)).toBeGreaterThan(0);
   await page.locator('#reviewTimeline .review-vertical-segment').filter({ hasText: '产品设计' }).hover();
   await expect(page.locator('#reviewTimelineDetail')).toContainText('产品设计');
   await expect(page.locator('#reviewTimelineDetail')).toContainText('10:47');
@@ -1309,6 +1311,32 @@ test('time review matches the full-width daily report prototype with date naviga
   await page.setViewportSize({ width: 680, height: 900 });
   await expect(page.locator('#reviewDateSelect')).toBeVisible();
   await page.screenshot({ path: 'artifacts/screenshots/time-review-narrow.png', fullPage: true });
+});
+
+test('time review gives a short entry a four-hour viewport instead of stretching it across the panel', async ({ page }) => {
+  await page.addInitScript(() => {
+    const startedAt = new Date('2026-09-20T10:53:00').getTime();
+    const endedAt = new Date('2026-09-20T10:58:00').getTime();
+    const state = {
+      now: endedAt, timer: { status: 'idle', phase: 'focus', remainingMs: 25 * 60_000, todayCount: 0 }, todos: { items: [], activeId: null }, alarms: [],
+      review: { days: [{
+        date: '2026-09-20', rangeStartAt: startedAt, rangeEndAt: endedAt,
+        totals: { focusMs: 5 * 60_000, meetingMs: 0, scheduledMeetingMs: 0, breakMs: 0, excludedMs: 0, unrecordedMs: 0 },
+        timeline: [{ startedAt, endedAt, kind: 'focus', todoId: null, taskTitle: '列 todo' }],
+        tasks: [{ key: 'manual:列 todo', title: '列 todo', ms: 5 * 60_000 }],
+        reminders: [], reminderBuckets: {}, counts: {}, restTimeWorkMs: 0, extensionCount: 0, actualOffworkAt: null
+      }] },
+      offwork: {}, settings: {}
+    };
+    globalThis.pomopet = { getState: async () => structuredClone(state), onState: () => () => {}, command: async () => structuredClone(state), showControl: () => {}, setDirty: () => {}, onDiscardDrafts: () => () => {} };
+  });
+
+  await page.goto('/');
+  await page.getByRole('tab', { name: '时间回顾' }).click();
+  await expect(page.locator('#reviewRangeLabel')).toHaveText('07:00–11:00');
+  expect(await page.locator('#reviewTimeline .review-vertical').evaluate((node) => Number.parseFloat(node.style.height))).toBe(520);
+  await expect(page.locator('#reviewTimeline .review-vertical-segment')).toHaveText('列 todo');
+  expect(await page.locator('#reviewTimeline').evaluate((node) => node.scrollHeight <= node.clientHeight)).toBe(true);
 });
 
 test('off-work pet action names the configured snooze duration', async ({ page }) => {

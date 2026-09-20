@@ -54,6 +54,8 @@ let lastQueuedCustomDuration = null;
 let selectedReviewDate = null;
 let manualFocusNotice = '';
 let reviewDateOptionsSignature = null;
+let reviewTimelineAutoScrollDate = null;
+let reviewTimelineRenderedDate = null;
 
 function createBrowserBridge() {
   const demo = {
@@ -320,13 +322,21 @@ function clockTime(timestamp) {
     : '--:--';
 }
 
-function reviewTimeline(day) {
+function reviewTimelineAxis(day) {
   const rawStart = Number(day.rangeStartAt); const rawEnd = Number(day.rangeEndAt);
-  if (!Number.isFinite(rawStart) || !Number.isFinite(rawEnd) || rawEnd <= rawStart) return '<p class="review-empty">这一天还没有形成可绘制的时间线。</p>';
+  if (!Number.isFinite(rawStart) || !Number.isFinite(rawEnd) || rawEnd <= rawStart) return null;
   const axisStartDate = new Date(rawStart); axisStartDate.setMinutes(0, 0, 0);
   const axisEndDate = new Date(rawEnd); axisEndDate.setMinutes(0, 0, 0); if (axisEndDate.getTime() < rawEnd) axisEndDate.setHours(axisEndDate.getHours() + 1);
-  const axisStart = axisStartDate.getTime(); const axisEnd = Math.max(axisStart + 3_600_000, axisEndDate.getTime()); const span = axisEnd - axisStart;
-  const minutes = Math.max(60, Math.round(span / 60_000)); const height = Math.max(620, minutes * 1.45);
+  const axisEnd = axisEndDate.getTime();
+  const axisStart = Math.min(axisStartDate.getTime(), axisEnd - 4 * 3_600_000);
+  return { rawStart, rawEnd, axisStart, axisEnd, span: axisEnd - axisStart };
+}
+
+function reviewTimeline(day) {
+  const axis = reviewTimelineAxis(day);
+  if (!axis) return '<p class="review-empty">这一天还没有形成可绘制的时间线。</p>';
+  const { rawEnd, axisStart, span } = axis;
+  const height = Math.ceil(span / 3_600_000 * 130);
   const position = (timestamp) => Math.max(0, Math.min(height, (Number(timestamp) - axisStart) / span * height));
   const totalHours = Math.max(1, Math.round(span / 3_600_000)); const hourStep = totalHours > 13 ? 2 : 1;
   const hours = [];
@@ -339,7 +349,7 @@ function reviewTimeline(day) {
     const top = position(item.startedAt); const bottom = position(item.endedAt);
     const label = item.kind === 'focus' ? item.taskTitle || '未命名任务' : item.kind === 'meeting' ? item.label || '会议' : kindLabel[item.kind] || '未记录';
     const detail = `${clockTime(item.startedAt)}–${clockTime(item.endedAt)} · ${label}`;
-    return `<button class="review-vertical-segment kind-${escapeAttr(item.kind || 'unrecorded')}" type="button" style="top:${top}px;height:${Math.max(5, bottom - top)}px" data-detail="${escapeAttr(detail)}" aria-label="${escapeAttr(detail)}">${escapeHtml(label)}</button>`;
+    return `<button class="review-vertical-segment kind-${escapeAttr(item.kind || 'unrecorded')}" type="button" style="top:${top}px;height:${Math.max(14, bottom - top)}px" data-detail="${escapeAttr(detail)}" aria-label="${escapeAttr(detail)}">${escapeHtml(label)}</button>`;
   }).join('');
   const reminderEvents = day.reminderTimeline?.length
     ? day.reminderTimeline
@@ -349,7 +359,15 @@ function reviewTimeline(day) {
     const marker = reminder.includes('水') ? '水' : /动|活动|运动|站/.test(reminder) ? '动' : '醒';
     return `<span class="review-reminder-marker" style="top:${position(event.firedAt)}px" title="${escapeAttr(`${clockTime(event.firedAt)} ${reminder}${event.count ? ` ${event.count} 次` : ''}`)}">${marker}</span>`;
   }).join('');
-  return `<div class="review-vertical" style="height:${height}px"><div class="review-vertical-axis">${hours.join('')}</div><div class="review-vertical-track">${segments}</div><div class="review-vertical-reminders">${reminderMarkers}</div></div>`;
+  return `<div class="review-vertical" style="height:${height}px" data-latest-top="${position(rawEnd)}"><div class="review-vertical-axis">${hours.join('')}</div><div class="review-vertical-track">${segments}</div><div class="review-vertical-reminders">${reminderMarkers}</div></div>`;
+}
+
+function positionReviewTimeline() {
+  const timelineRoot = $('#reviewTimeline');
+  if (!timelineRoot.clientHeight || timelineRoot.scrollHeight <= timelineRoot.clientHeight || reviewTimelineAutoScrollDate === selectedReviewDate) return;
+  const latestTop = Number(timelineRoot.querySelector('.review-vertical')?.dataset.latestTop);
+  timelineRoot.scrollTop = Math.max(0, latestTop - timelineRoot.clientHeight * .65);
+  reviewTimelineAutoScrollDate = selectedReviewDate;
 }
 
 function reviewMeetingGantt(day) {
@@ -387,8 +405,14 @@ function renderReview() {
   const scheduledMeetingMs = Number(day.totals?.scheduledMeetingMs) || 0;
   const overlappedMeetingMs = Math.max(0, scheduledMeetingMs - (Number(day.totals?.meetingMs) || 0));
   $('#reviewSummary').innerHTML = `<div><span>有效专注</span><strong>${compactDuration(day.totals?.focusMs)}</strong><small>${day.counts?.natural || 0} 颗自然完成</small></div><div><span>会议占用</span><strong>${compactDuration(day.totals?.meetingMs)}</strong><small>${overlappedMeetingMs ? `重叠专注 ${compactDuration(overlappedMeetingMs)}` : '无专注重叠'}</small></div><div><span>休息与恢复</span><strong>${compactDuration(day.totals?.breakMs)}</strong><small>${day.restTimeWorkMs ? `休息时段工作 ${compactDuration(day.restTimeWorkMs)}` : '节奏由你主动记录'}</small></div><div><span>最终收工</span><strong>${finalTime}</strong><small>${day.extensionCount ? `延长 ${day.extensionCount} 次` : '没有继续延长'}</small></div><div><span>未记录空档</span><strong>${compactDuration(day.totals?.unrecordedMs)}</strong><small>不用记录所有琐事</small></div>`;
-  $('#reviewRangeLabel').textContent = `${clockTime(day.rangeStartAt)}–${clockTime(day.rangeEndAt)}`;
-  $('#reviewTimeline').innerHTML = reviewTimeline(day);
+  const axis = reviewTimelineAxis(day);
+  $('#reviewRangeLabel').textContent = axis ? `${clockTime(axis.axisStart)}–${clockTime(axis.axisEnd)}` : `${clockTime(day.rangeStartAt)}–${clockTime(day.rangeEndAt)}`;
+  const timelineRoot = $('#reviewTimeline');
+  const previousScrollTop = reviewTimelineRenderedDate === day.date ? timelineRoot.scrollTop : null;
+  timelineRoot.innerHTML = reviewTimeline(day);
+  reviewTimelineRenderedDate = day.date;
+  if (previousScrollTop != null) timelineRoot.scrollTop = previousScrollTop;
+  else positionReviewTimeline();
   $('#reviewTimelineDetail').textContent = '悬停时间块查看任务和时段';
   $$('#reviewTimeline .review-vertical-segment').forEach((segment) => {
     const showDetail = () => { $('#reviewTimelineDetail').textContent = segment.dataset.detail; };
@@ -942,6 +966,7 @@ function activateTab(button, focus = false) {
     drawer.classList.toggle('active', active);
     drawer.hidden = !active;
   });
+  if (button.dataset.tab === 'review') globalThis.requestAnimationFrame(positionReviewTimeline);
   if (focus) button.focus();
   return true;
 }
